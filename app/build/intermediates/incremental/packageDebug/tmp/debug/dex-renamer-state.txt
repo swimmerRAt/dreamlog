@@ -1,0 +1,7 @@
+#Mon May 11 20:31:41 KST 2026
+base.0=/Volumes/ExternalSSD/ANS/dreamlog/app/build/intermediates/dex/debug/mergeProjectDexDebug/0/classes.dex
+base.1=/Volumes/ExternalSSD/ANS/dreamlog/app/build/intermediates/dex/debug/mergeProjectDexDebug/3/classes.dex
+path.0=0/classes.dex
+path.1=3/classes.dex
+renamed.0=classes.dex
+renamed.1=classes2.dex
