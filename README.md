@@ -10,13 +10,11 @@
 ## 페이지 파일 위치
 새 페이지를 추가하거나 기존 페이지를 수정할 때는 아래 경로에서 작업합니다.
 
-```app/src/main/java/com/example/basicandroidapp/
-```
+```app/src/main/java/com/example/basicandroidapp/```
 
 예를 들어 설정 페이지를 추가한다면 다음처럼 새 파일을 만듭니다.
 
-```app/src/main/java/com/example/basicandroidapp/Settings.java
-```
+```app/src/main/java/com/example/basicandroidapp/Settings.java```
 
 Java 클래스명은 파일명과 맞추고, 대문자로 시작하는 PascalCase를 사용합니다.
 ## 각 페이지 역할
@@ -42,5 +40,7 @@ Java 클래스명은 파일명과 맞추고, 대문자로 시작하는 PascalCas
 - 앱 설치하는 명령어, 앱 설치하는 명령어로 맨 처음, 앱 수정 시 재실행해줘야됨
 
 ```/Users/suyeong/Library/Android/sdk/platform-tools/adb wait-for-device```
+
 ```./gradlew :app:installDebug```
+
 ```/Users/suyeong/Library/Android/sdk/platform-tools/adb shell am start -n com.example.basicandroidapp/.MainActivity```
