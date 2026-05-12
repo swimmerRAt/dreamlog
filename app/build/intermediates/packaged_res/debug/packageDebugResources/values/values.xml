@@ -3,8 +3,7 @@
     <color name="primary">#2563EB</color>
     <color name="primary_dark">#1E40AF</color>
     <color name="white">#FFFFFF</color>
-    <string name="app_name">Basic Android App</string>
-    <string name="welcome_message">Hello Android</string>
+    <string name="app_name">Dreamlog</string>
     <style name="Theme.BasicAndroidApp" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>

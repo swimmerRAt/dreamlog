@@ -1,5 +1,4 @@
 com.example.basicandroidapp:style/Theme.BasicAndroidApp = 0x7f050000
-com.example.basicandroidapp:string/welcome_message = 0x7f040001
 com.example.basicandroidapp:string/app_name = 0x7f040000
 com.example.basicandroidapp:mipmap/ic_launcher_round = 0x7f030001
 com.example.basicandroidapp:mipmap/ic_launcher = 0x7f030000

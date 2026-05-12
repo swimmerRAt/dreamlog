@@ -5,5 +5,4 @@ int drawable ic_launcher_foreground 0x7f020000
 int mipmap ic_launcher 0x7f030000
 int mipmap ic_launcher_round 0x7f030001
 int string app_name 0x7f040000
-int string welcome_message 0x7f040001
 int style Theme_BasicAndroidApp 0x7f050000

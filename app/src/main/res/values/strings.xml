@@ -1,4 +1,3 @@
 <resources>
-    <string name="app_name">Basic Android App</string>
-    <string name="welcome_message">Hello Android</string>
+    <string name="app_name">Dreamlog</string>
 </resources>
