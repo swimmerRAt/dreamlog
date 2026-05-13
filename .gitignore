@@ -1,0 +1,21 @@
+# Android
+*.iml
+.gradle/
+local.properties
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Server
+server/.env
+server/__pycache__/
+server/**/__pycache__/
+server/*.db
+server/*.db-shm
+server/*.db-wal
+server/venv/
+server/.venv/

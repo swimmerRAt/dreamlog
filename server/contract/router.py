@@ -1,0 +1,126 @@
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+import json
+from database import get_db, Analysis, User
+from auth.utils import get_current_user
+from contract.analyzer import ocr_image, analyze_contract
+
+router = APIRouter(prefix="/contract", tags=["contract"])
+
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+class ToxicClause(BaseModel):
+    clause: str
+    reason: str
+    severity: str
+    recommendation: str
+
+
+class AnalysisResponse(BaseModel):
+    id: int
+    risk_level: str
+    summary: str
+    toxic_clauses: List[ToxicClause]
+    original_text: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AnalysisListItem(BaseModel):
+    id: int
+    risk_level: str
+    summary: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.post("/analyze", response_model=AnalysisResponse)
+async def analyze(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다. (JPEG, PNG, WEBP, HEIC 지원)")
+
+    image_bytes = await file.read()
+    if len(image_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="파일 크기가 10MB를 초과합니다.")
+
+    try:
+        extracted_text = await ocr_image(image_bytes, file.content_type)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OCR 처리 실패: {str(e)}")
+
+    if not extracted_text.strip():
+        raise HTTPException(status_code=422, detail="계약서에서 텍스트를 추출할 수 없습니다.")
+
+    try:
+        result = await analyze_contract(extracted_text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"계약서 분석 실패: {str(e)}")
+
+    analysis = Analysis(
+        user_id=current_user.id,
+        original_text=extracted_text,
+        toxic_clauses=json.dumps(result.get("toxic_clauses", []), ensure_ascii=False),
+        summary=result.get("summary", ""),
+        risk_level=result.get("risk_level", "알 수 없음"),
+    )
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+
+    return _build_response(analysis)
+
+
+@router.get("/history", response_model=List[AnalysisListItem])
+def get_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    analyses = (
+        db.query(Analysis)
+        .filter(Analysis.user_id == current_user.id)
+        .order_by(Analysis.created_at.desc())
+        .all()
+    )
+    return analyses
+
+
+@router.get("/{analysis_id}", response_model=AnalysisResponse)
+def get_analysis(
+    analysis_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    analysis = db.query(Analysis).filter(
+        Analysis.id == analysis_id,
+        Analysis.user_id == current_user.id,
+    ).first()
+
+    if not analysis:
+        raise HTTPException(status_code=404, detail="분석 기록을 찾을 수 없습니다.")
+
+    return _build_response(analysis)
+
+
+def _build_response(analysis: Analysis) -> dict:
+    toxic_clauses = json.loads(analysis.toxic_clauses) if analysis.toxic_clauses else []
+    return {
+        "id": analysis.id,
+        "risk_level": analysis.risk_level,
+        "summary": analysis.summary,
+        "toxic_clauses": toxic_clauses,
+        "original_text": analysis.original_text,
+        "created_at": analysis.created_at,
+    }
