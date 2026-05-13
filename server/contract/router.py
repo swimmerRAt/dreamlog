@@ -6,7 +6,7 @@ from datetime import datetime
 import json
 from database import get_db, Analysis, User
 from auth.utils import get_current_user
-from contract.analyzer import ocr_image, analyze_contract
+from llm import analyze_contract, ocr_contract_image
 
 router = APIRouter(prefix="/contract", tags=["contract"])
 
@@ -57,7 +57,7 @@ async def analyze(
         raise HTTPException(status_code=400, detail="파일 크기가 10MB를 초과합니다.")
 
     try:
-        extracted_text = await ocr_image(image_bytes, file.content_type)
+        extracted_text = await ocr_contract_image(image_bytes)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"OCR 처리 실패: {str(e)}")
 

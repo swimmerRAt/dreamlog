@@ -4,13 +4,13 @@ from contextlib import asynccontextmanager
 from database import init_db
 from auth.router import router as auth_router
 from contract.router import router as contract_router
-from contract.analyzer import check_ollama_health
+from llm import get_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    ollama_ok = await check_ollama_health()
+    ollama_ok = await get_client().health()
     if not ollama_ok:
         print("⚠️  경고: Ollama 서버에 연결할 수 없습니다. 'ollama serve'를 실행했는지 확인해주세요.")
     else:
@@ -38,7 +38,7 @@ app.include_router(contract_router)
 
 @app.get("/health")
 async def health():
-    ollama_ok = await check_ollama_health()
+    ollama_ok = await get_client().health()
     return {
         "status": "ok",
         "ollama": "connected" if ollama_ok else "disconnected",
