@@ -43,6 +43,10 @@ class AnalysisListItem(BaseModel):
         from_attributes = True
 
 
+class AnalyzeTextRequest(BaseModel):
+    text: str
+
+
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze(
     file: UploadFile = File(...),
@@ -72,6 +76,36 @@ async def analyze(
     analysis = Analysis(
         user_id=current_user.id,
         original_text=extracted_text,
+        toxic_clauses=json.dumps(result.get("toxic_clauses", []), ensure_ascii=False),
+        summary=result.get("summary", ""),
+        risk_level=result.get("risk_level", "알 수 없음"),
+    )
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+
+    return _build_response(analysis)
+
+
+@router.post("/analyze-text", response_model=AnalysisResponse)
+async def analyze_text(
+    req: AnalyzeTextRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """OCR을 건너뛰고 텍스트로 바로 독소조항 분석. 통합 테스트·복붙 입력용."""
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="텍스트가 비어 있습니다.")
+
+    try:
+        result = await analyze_contract(text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"계약서 분석 실패: {str(e)}")
+
+    analysis = Analysis(
+        user_id=current_user.id,
+        original_text=text,
         toxic_clauses=json.dumps(result.get("toxic_clauses", []), ensure_ascii=False),
         summary=result.get("summary", ""),
         risk_level=result.get("risk_level", "알 수 없음"),

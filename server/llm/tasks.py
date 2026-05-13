@@ -20,6 +20,56 @@ from .config import (
 from .modelfile import TOXIC_DETECTOR_SYSTEM_PROMPT
 
 
+_VALID_RISK_LEVELS = {"높음", "중간", "낮음"}
+
+
+def _coerce_severity(value: Any) -> str:
+    """severity 값이 빠지거나 다른 라벨이면 '중간'으로 정리한다."""
+    if not value:
+        return "중간"
+    s = str(value).strip()
+    if s in _VALID_RISK_LEVELS:
+        return s
+    # 신호등 라벨(학습 데이터에서 자주 등장) → 출력 라벨로 매핑
+    mapping = {"빨강": "높음", "노랑": "중간", "초록": "낮음",
+               "high": "높음", "medium": "중간", "low": "낮음"}
+    return mapping.get(s.lower(), "중간")
+
+
+def _normalize_clause(raw: Any) -> dict[str, str]:
+    """LLM이 다른 키 이름을 쓰더라도 응답 스키마에 맞게 정규화."""
+    if not isinstance(raw, dict):
+        return {"clause": str(raw), "reason": "", "severity": "중간", "recommendation": ""}
+    clause = raw.get("clause") or raw.get("조항") or ""
+    reason = (raw.get("reason") or raw.get("impact") or raw.get("이유")
+              or raw.get("근거") or "")
+    severity = _coerce_severity(raw.get("severity") or raw.get("위험도") or raw.get("risk"))
+    recommendation = (raw.get("recommendation") or raw.get("advice")
+                      or raw.get("권장") or raw.get("조치") or "")
+    return {
+        "clause": str(clause),
+        "reason": str(reason),
+        "severity": severity,
+        "recommendation": str(recommendation),
+    }
+
+
+def _normalize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
+    """analyze_contract 응답을 라우터 응답 스키마에 맞게 정리."""
+    risk = raw.get("risk_level") or raw.get("위험도") or "알 수 없음"
+    if isinstance(risk, str) and risk in {"빨강", "노랑", "초록"}:
+        risk = {"빨강": "높음", "노랑": "중간", "초록": "낮음"}[risk]
+    clauses_raw = raw.get("toxic_clauses") or raw.get("독소조항") or []
+    if not isinstance(clauses_raw, list):
+        clauses_raw = []
+    return {
+        "risk_level": str(risk),
+        "summary": str(raw.get("summary") or raw.get("요약") or ""),
+        "toxic_clauses": [_normalize_clause(c) for c in clauses_raw],
+        **({"error": raw["error"]} if "error" in raw else {}),
+    }
+
+
 CONTRACT_OCR_PROMPT = """이 이미지는 한국의 전월세(임대차) 계약서입니다.
 이미지에 있는 모든 텍스트를 그대로 추출해주세요.
 계약서에 있는 내용을 빠짐없이 정확하게 텍스트로 변환해주세요.
@@ -61,7 +111,7 @@ async def analyze_contract(
         prompt = FALLBACK_ANALYSIS_PROMPT.format(contract_text=contract_text)
 
     try:
-        return await cli.generate_json(prompt, cfg)
+        raw = await cli.generate_json(prompt, cfg)
     except OllamaError as e:
         return {
             "risk_level": "알 수 없음",
@@ -69,3 +119,4 @@ async def analyze_contract(
             "toxic_clauses": [],
             "error": str(e),
         }
+    return _normalize_analysis(raw)
