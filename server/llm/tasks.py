@@ -132,7 +132,7 @@ async def analyze_contract(
         prompt = contract_text
     else:
         # 폴백: 일반 텍스트 모델에 전체 프롬프트를 직접 주입
-        cfg = get_text_config().merged(temperature=0.1, format="json", num_ctx=8192)
+        cfg = get_text_config().merged(temperature=0.1, format="json", num_ctx=16384)
         prompt = FALLBACK_ANALYSIS_PROMPT.format(contract_text=contract_text)
 
     try:

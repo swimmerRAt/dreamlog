@@ -108,8 +108,13 @@ def get_toxic_detector_config() -> LLMConfig:
     """
     return LLMConfig(
         model=TOXIC_DETECTOR_MODEL,
-        temperature=0.1,
+        # 결정성을 최대화. 같은 계약서에 호출마다 다른 독소조항 목록이 나오면
+        # 디버깅·평가가 불가능해서 temperature는 0으로 둔다.
+        temperature=0.0,
         top_p=0.9,
-        num_ctx=8192,
+        # 시스템 프롬프트(~3k자) + 참조 자료(~8.6k자) + 계약서(~3k자)가
+        # 한 컨텍스트에 들어가야 한다. 8192면 잘려서 모델이 스키마를 못 본다.
+        num_ctx=16384,
+        seed=42,
         format="json",
     )
