@@ -28,7 +28,9 @@ from .modelfile import (
 )
 from .tasks import (
     CONTRACT_OCR_PROMPT,
+    IMAGE_DESCRIPTION_PROMPT,
     analyze_contract,
+    describe_image,
     ocr_contract_image,
 )
 
@@ -42,11 +44,13 @@ __all__ = [
     "OllamaClient",
     "OllamaError",
     "CONTRACT_OCR_PROMPT",
+    "IMAGE_DESCRIPTION_PROMPT",
     "TOXIC_DETECTOR_SYSTEM_PROMPT",
     "analyze_contract",
     "build_model_spec",
     "build_modelfile",
     "create_toxic_detector",
+    "describe_image",
     "get_client",
     "get_text_config",
     "get_toxic_detector_config",

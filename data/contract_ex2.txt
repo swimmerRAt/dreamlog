@@ -1,0 +1,19 @@
+OCR Test Document
+
+1. English Text Sample
+The quick brown fox jumps over the lazy dog.
+Pack my box with five dozen liquor jugs.
+
+2. Numbers & Special Characters
+Date: 2026-05-14 Time: 09:30 AM
+Phone: +82-10-1234-5678 Price: $1,234.56
+Email: test@example.com ID: OCR-2026-001
+
+3. Table Data
+| Name | Email | Score | Grade |
+|------|-------|-------|-------|
+| Alice Kim | alice@test.com | 95 | A |
+| Bob Lee | bob@test.com | 82 | B |
+| Carol Cho | carol@test.com | 78 | C |
+
+* This image is generated for OCR testing purposes *

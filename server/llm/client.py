@@ -7,11 +7,17 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import sys
 from typing import Any, AsyncIterator, Optional
 
 import httpx
 
 from .config import LLMConfig, OLLAMA_BASE_URL, OLLAMA_TIMEOUT
+
+
+def _llm_debug() -> bool:
+    return os.getenv("LLM_DEBUG", "").lower() in ("1", "true", "yes")
 
 
 class OllamaError(RuntimeError):
@@ -130,10 +136,28 @@ class OllamaClient:
         """단발성 텍스트 생성. 이미지가 있으면 base64로 첨부."""
         image_b64 = [base64.b64encode(b).decode("utf-8") for b in images] if images else None
         payload = config.to_payload(prompt, images=image_b64)
+        if _llm_debug():
+            img_info = (
+                f"images={len(images)} bytes_total={sum(len(b) for b in images)}"
+                if images else "images=0"
+            )
+            print(
+                f"[LLM] generate model={config.model} prompt_chars={len(prompt)} {img_info}",
+                file=sys.stderr,
+            )
         async with self._client() as client:
             res = await client.post("/api/generate", json=payload)
             res.raise_for_status()
-            return res.json()["response"]
+            data = res.json()
+            if _llm_debug():
+                print(
+                    f"[LLM] response chars={len(data.get('response', ''))} "
+                    f"eval_count={data.get('eval_count')} "
+                    f"prompt_eval_count={data.get('prompt_eval_count')} "
+                    f"total_duration_ms={(data.get('total_duration', 0)) // 1_000_000}",
+                    file=sys.stderr,
+                )
+            return data["response"]
 
     async def generate_json(
         self,

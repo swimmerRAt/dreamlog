@@ -126,3 +126,89 @@ ollama pull llava
 cd server
 python3 llm_test.py
 ```
+
+## OCR 테스트 환경 설정 (팀원 공유용)
+
+OCR은 **Ollama가 아니라 HuggingFace transformers + 로컬 PyTorch**로 Qwen2-VL을 직접 호출한다 ([server/llm/qwen_ocr.py](server/llm/qwen_ocr.py)). 따라서 `ollama serve`는 필요 없고, HuggingFace 캐시에 모델만 있으면 된다.
+
+### 1) 필수 패키지
+
+`server/requirements.txt`에 작성돼있음
+
+```bash
+# GPU(권장) — CUDA 12.x 머신
+pip install "torch>=2.4" "transformers>=4.45" Pillow accelerate
+
+# CPU만 — 추론 매우 느림(분 단위), 테스트용으로만
+pip install torch transformers Pillow
+```
+
+> 검증된 조합: `torch==2.10.0+cu128`, `transformers==4.57.6`, CUDA 12.8.
+> `Qwen2VLForConditionalGeneration` 클래스를 쓰려면 `transformers>=4.45` 필요.
+
+### 2) GPU / 디스크 요구사항
+
+| 항목 | 권장 | 비고 |
+| --- | --- | --- |
+| GPU VRAM | ≥ 8GB (Qwen2-VL-2B, float16 기준) | 7B 모델은 ≥ 20GB |
+| HF 캐시 디스크 | ≥ 8GB 여유 | 첫 실행 시 모델 자동 다운로드 |
+| CUDA | 12.x (또는 본인 torch와 호환되는 버전) | `python3 -c "import torch; print(torch.cuda.is_available())"`로 확인 |
+
+HuggingFace 캐시 위치는 기본 `~/.cache/huggingface/`. 다른 경로를 쓰려면 `HF_HOME` 환경변수 설정.
+
+### 3) 환경 변수 (선택)
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `QWEN_OCR_MODEL` | `Qwen/Qwen2-VL-2B-Instruct` | HF 모델 ID. 결과 품질이 낮으면 `Qwen/Qwen2-VL-7B-Instruct`로 교체 |
+| `QWEN_OCR_DEVICE` | (자동: cuda 가능하면 cuda, 아니면 cpu) | `cuda` / `cuda:0` / `cpu` |
+| `QWEN_OCR_DTYPE` | (자동: cuda면 float16, cpu면 float32) | `float16` / `bfloat16` / `float32` |
+| `LLM_DEBUG` | `0` | `1`로 두면 로딩·생성 메타데이터를 stderr로 출력 |
+
+### 4) 테스트 이미지 준비
+
+`data/image/` 폴더에 OCR할 이미지를 넣는다. 폴더가 없으면 만든다.
+
+```bash
+mkdir -p data/image
+# 예: 본인 계약서 사진을 data/image/sample.png로 복사
+```
+
+`data/image/`는 `.gitignore`되어 있지 않지만, 개인 계약서가 들어갈 수 있으므로 **커밋 전에 확인**할 것.
+
+### 5) 실행
+
+```bash
+cd server
+python3 ocr_image.py sample.png         # data/image/sample.png 사용
+python3 ocr_image.py /abs/path/img.jpg  # 절대 경로도 가능
+
+# 결과 → data/contract_exN.txt (N은 비어있는 가장 작은 번호로 자동 할당)
+```
+
+유용한 옵션:
+
+```bash
+python3 ocr_image.py sample.png --verify  # OCR 전에 이미지 묘사로 그라운딩 확인
+python3 ocr_image.py sample.png --debug   # 로딩·토큰 수 등 디버그 로그
+python3 ocr_image.py sample.png --index 5 # contract_ex5.txt로 강제 지정
+```
+
+### 6) 첫 실행 시 발생하는 일
+
+1. `Qwen/Qwen2-VL-2B-Instruct` 모델·프로세서를 HF Hub에서 다운로드 (≈ 4GB, 한 번만)
+2. 모델을 GPU/CPU에 로드 (이후 호출은 모듈 단위로 캐싱)
+3. 이미지 + 프롬프트로 추론 → `data/contract_exN.txt` 저장
+4. 출력 끝에 환각 신호 감지 통계(`chars/KB`, 줄 중복률 등)도 함께 표시
+
+### 7) 자주 만나는 문제
+
+| 증상 | 원인 / 해결 |
+| --- | --- |
+| `CUDA out of memory` | 7B 모델은 VRAM 부족 가능 → 2B로 다운그레이드, 또는 `QWEN_OCR_DTYPE=bfloat16`/`float16`으로 |
+| 다운로드가 멈춤 | 네트워크/방화벽 문제. `HF_HUB_OFFLINE=0` 확인, 또는 미리 `huggingface-cli download Qwen/Qwen2-VL-2B-Instruct`로 받아둠 |
+| "저는 OCR을 할 수 없습니다…" 류 거부 응답 | 프롬프트가 모델 거부 패턴을 트리거. `server/llm/tasks.py`의 `CONTRACT_OCR_PROMPT`가 너무 장황하거나 부정문 위주면 발생 — 짧고 직접적인 명령으로 유지 |
+| 같은 줄이 반복되는 환각 | 모델 한계. 더 큰 모델(`QWEN_OCR_MODEL=Qwen/Qwen2-VL-7B-Instruct`)로 교체하거나 이미지 품질 개선 |
+| `Qwen2VLForConditionalGeneration` import 에러 | `transformers` 버전이 낮음 → `pip install -U transformers` |
+
+> 참고: OCR만 테스트할 때는 `ollama serve`가 **필요 없다**. Ollama는 독소조항 분석(`analyze_contract`) 단계에서만 사용된다.
