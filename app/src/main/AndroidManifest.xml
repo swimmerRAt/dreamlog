@@ -9,6 +9,18 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BasicAndroidApp">
         <activity
+            android:name=".AnalysisResultScreen"
+            android:exported="false" />
+        <activity
+            android:name=".OcrEditScreen"
+            android:exported="false" />
+        <activity
+            android:name=".ContractInput"
+            android:exported="false" />
+        <activity
+            android:name=".Login"
+            android:exported="false" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
