@@ -19,7 +19,7 @@ import android.widget.TextView;
 public class ContractInput extends Activity {
     private static final int PRIMARY = Color.rgb(63, 81, 181);
     private static final int TEXT = Color.rgb(33, 33, 33);
-    private static final int MUTED = Color.rgb(158, 158, 158);
+    private static final int MUTED = Color.rgb(117, 117, 117);
     private static final int BORDER = Color.rgb(224, 224, 224);
     private static final int CAMERA_BG = Color.rgb(26, 26, 46);
 
@@ -44,10 +44,6 @@ public class ContractInput extends Activity {
         LinearLayout root = new LinearLayout(hostActivity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(CAMERA_BG);
-        root.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
 
         root.addView(createTopBar());
         root.addView(createCameraArea());
@@ -56,36 +52,29 @@ public class ContractInput extends Activity {
     }
 
     private View createTopBar() {
-        LinearLayout container = new LinearLayout(hostActivity);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setBackgroundColor(Color.WHITE);
-        container.setLayoutParams(new LinearLayout.LayoutParams(
+        FrameLayout bar = new FrameLayout(hostActivity);
+        bar.setBackgroundColor(Color.WHITE);
+        bar.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(56)
         ));
 
-        TextView title = new TextView(hostActivity);
-        title.setText("계약서 입력");
-        title.setTextColor(TEXT);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(17));
-        title.setTypeface(typeface(Typeface.BOLD));
+        TextView title = label("계약서 입력", TEXT, 17, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
-        title.setLayoutParams(new LinearLayout.LayoutParams(
+        bar.addView(title, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1
+                ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
         View divider = new View(hostActivity);
         divider.setBackgroundColor(BORDER);
-        divider.setLayoutParams(new LinearLayout.LayoutParams(
+        FrameLayout.LayoutParams dividerParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(1)
-        ));
-
-        container.addView(title);
-        container.addView(divider);
-        return container;
+                dp(1),
+                Gravity.BOTTOM
+        );
+        bar.addView(divider, dividerParams);
+        return bar;
     }
 
     private View createCameraArea() {
@@ -97,11 +86,7 @@ public class ContractInput extends Activity {
                 1
         ));
 
-        TextView pill = new TextView(hostActivity);
-        pill.setText("계약서를 촬영하거나 불러오세요");
-        pill.setTextColor(PRIMARY);
-        pill.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(14));
-        pill.setTypeface(typeface(Typeface.BOLD));
+        TextView pill = label("계약서를 촬영하거나 불러오세요", PRIMARY, 14, Typeface.BOLD);
         pill.setGravity(Gravity.CENTER);
         pill.setPadding(dp(18), dp(10), dp(18), dp(10));
         pill.setBackground(roundRect(Color.argb(230, 255, 255, 255), dp(20), 0, 0));
@@ -114,12 +99,11 @@ public class ContractInput extends Activity {
         cameraArea.addView(pill, pillParams);
 
         ScanGuideView scanGuide = new ScanGuideView(hostActivity);
-        FrameLayout.LayoutParams guideParams = new FrameLayout.LayoutParams(
+        cameraArea.addView(scanGuide, new FrameLayout.LayoutParams(
                 dp(260),
                 dp(340),
                 Gravity.CENTER
-        );
-        cameraArea.addView(scanGuide, guideParams);
+        ));
         return cameraArea;
     }
 
@@ -136,8 +120,7 @@ public class ContractInput extends Activity {
 
         View handle = new View(hostActivity);
         handle.setBackground(roundRect(BORDER, dp(2), 0, 0));
-        handle.setLayoutParams(new LinearLayout.LayoutParams(dp(36), dp(4)));
-        sheet.addView(handle);
+        sheet.addView(handle, new LinearLayout.LayoutParams(dp(36), dp(4)));
 
         LinearLayout buttons = new LinearLayout(hostActivity);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -149,29 +132,24 @@ public class ContractInput extends Activity {
         buttonsParams.setMargins(0, dp(16), 0, 0);
         buttons.setLayoutParams(buttonsParams);
 
-        buttons.addView(createActionButton("●", "촬영하기", true, 0));
-        buttons.addView(createActionButton("▣", "갤러리 선택", false, dp(10)));
-        buttons.addView(createActionButton("✏", "직접 입력", false, dp(10)));
+        buttons.addView(createActionButton("촬영", true, 0));
+        buttons.addView(createActionButton("갤러리", false, dp(10)));
+        buttons.addView(createActionButton("직접 입력", false, dp(10)));
         sheet.addView(buttons);
 
-        TextView caption = new TextView(hostActivity);
-        caption.setText("JPG · PNG · PDF 지원");
-        caption.setTextColor(MUTED);
-        caption.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(11));
+        TextView caption = label("JPG · PNG · PDF 지원", MUTED, 11, Typeface.NORMAL);
         caption.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams captionParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         captionParams.setMargins(0, dp(8), 0, 0);
-        caption.setLayoutParams(captionParams);
-        sheet.addView(caption);
+        sheet.addView(caption, captionParams);
         return sheet;
     }
 
-    private View createActionButton(String icon, String label, boolean primary, int leftMargin) {
-        LinearLayout button = new LinearLayout(hostActivity);
-        button.setOrientation(LinearLayout.VERTICAL);
+    private View createActionButton(String label, boolean primary, int leftMargin) {
+        TextView button = label(label, primary ? Color.WHITE : PRIMARY, 13, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
         button.setClickable(true);
         button.setFocusable(true);
@@ -187,36 +165,22 @@ public class ContractInput extends Activity {
         );
         params.setMargins(leftMargin, 0, 0, 0);
         button.setLayoutParams(params);
-
-        int textColor = primary ? Color.WHITE : PRIMARY;
-        TextView iconView = new TextView(hostActivity);
-        iconView.setText(icon);
-        iconView.setTextColor(textColor);
-        iconView.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(24));
-        iconView.setGravity(Gravity.CENTER);
-
-        TextView labelView = new TextView(hostActivity);
-        labelView.setText(label);
-        labelView.setTextColor(textColor);
-        labelView.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(12));
-        labelView.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        labelParams.setMargins(0, dp(4), 0, 0);
-        labelView.setLayoutParams(labelParams);
-
-        button.addView(iconView);
-        button.addView(labelView);
         return button;
     }
 
     private void openOcrEditScreen() {
-        Intent intent = hostActivity == this
-                ? new Intent(ContractInput.this, OcrEditScreen.class)
-                : new Intent(hostActivity, OcrEditScreen.class);
+        Intent intent = new Intent(hostActivity, OcrEditScreen.class);
+        intent.putExtra(OcrEditScreen.EXTRA_OCR_TEXT, OcrEditScreen.DEFAULT_CONTRACT_TEXT);
         hostActivity.startActivity(intent);
+    }
+
+    private TextView label(String value, int color, int size, int style) {
+        TextView textView = new TextView(hostActivity);
+        textView.setText(value);
+        textView.setTextColor(color);
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(size));
+        textView.setTypeface(typeface(style));
+        return textView;
     }
 
     private GradientDrawable roundRect(int color, int radius, int strokeColor, int strokeWidth) {
@@ -289,7 +253,6 @@ public class ContractInput extends Activity {
             float bracket = dp(20);
 
             canvas.drawRoundRect(inset, inset, right, bottom, radius, radius, borderPaint);
-
             canvas.drawLine(inset, inset, inset + bracket, inset, bracketPaint);
             canvas.drawLine(inset, inset, inset, inset + bracket, bracketPaint);
             canvas.drawLine(right, inset, right - bracket, inset, bracketPaint);
