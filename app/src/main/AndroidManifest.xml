@@ -9,6 +9,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BasicAndroidApp">
         <activity
+            android:name=".ExpertComment"
+            android:exported="false" />
+        <activity
+            android:name=".ReportSummary"
+            android:exported="false" />
+        <activity
             android:name=".AnalysisResultScreen"
             android:exported="false" />
         <activity
