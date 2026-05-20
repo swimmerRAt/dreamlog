@@ -37,9 +37,12 @@ public class AnalysisResultScreen extends Activity {
     private static final int SAFE = Color.rgb(76, 175, 80);
     private static final int SAFE_TINT = Color.rgb(232, 245, 233);
 
+    private String contractText;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        contractText = getIntent().getStringExtra(ApiContract.EXTRA_CONTRACT_TEXT);
         setContentView(createView());
     }
 
@@ -155,10 +158,11 @@ public class AnalysisResultScreen extends Activity {
     }
 
     private SpannableString highlightedText() {
-        String value = "계약 기간은 2년으로 한다 [안전]\n\n"
+        String fallbackText = "계약 기간은 2년으로 한다 [안전]\n\n"
                 + "임대인은 별도 통보 없이 계약을 해지할 수 있다 [위험]\n\n"
                 + "수리비 일체는 임차인이 부담한다 [주의]\n\n"
                 + "전세금 반환이 지연되는 경우 임대인은 책임을 면할 수 있다.";
+        String value = contractText == null || contractText.trim().isEmpty() ? fallbackText : contractText;
         SpannableString span = new SpannableString(value);
         mark(span, value, "계약 기간은 2년으로 한다", SAFE_TINT, SAFE);
         mark(span, value, "[안전]", SAFE_TINT, SAFE);

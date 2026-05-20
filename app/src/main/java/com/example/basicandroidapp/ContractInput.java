@@ -170,7 +170,7 @@ public class ContractInput extends Activity {
 
     private void openOcrEditScreen() {
         Intent intent = new Intent(hostActivity, OcrEditScreen.class);
-        intent.putExtra(OcrEditScreen.EXTRA_OCR_TEXT, OcrEditScreen.DEFAULT_CONTRACT_TEXT);
+        intent.putExtra(OcrEditScreen.EXTRA_CONTRACT_TEXT, OcrEditScreen.DEFAULT_CONTRACT_TEXT);
         hostActivity.startActivity(intent);
     }
 

@@ -28,6 +28,8 @@ public class MainActivity extends Activity {
             pageView = new ContractInput(this).createView();
         }
 
+        pageView.setForceDarkAllowed(false);
+        pageView.setAlpha(1f);
         setContentView(pageView);
     }
 
