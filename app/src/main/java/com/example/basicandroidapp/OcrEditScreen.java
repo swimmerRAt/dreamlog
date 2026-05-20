@@ -21,7 +21,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class OcrEditScreen extends Activity {
+    @Deprecated
     static final String EXTRA_OCR_TEXT = "ocr_text";
+    static final String EXTRA_CONTRACT_TEXT = ApiContract.EXTRA_CONTRACT_TEXT;
     static final String DEFAULT_CONTRACT_TEXT =
             "전세 임대차계약서\n\n"
                     + "임대인 김OO과 임차인 이OO은 아래 부동산에 대하여 임대차계약을 체결한다.\n\n"
@@ -43,7 +45,7 @@ public class OcrEditScreen extends Activity {
     private static final int INDIGO_TINT = Color.rgb(232, 234, 246);
     private static final int COUNT_TEXT = Color.rgb(158, 158, 158);
 
-    private EditText ocrText;
+    private EditText contractTextInput;
     private TextView countText;
 
     @Override
@@ -150,20 +152,20 @@ public class OcrEditScreen extends Activity {
         params.setMargins(dp(16), 0, dp(16), dp(12));
         card.setLayoutParams(params);
 
-        ocrText = new EditText(this);
-        ocrText.setText(getInitialText());
-        ocrText.setSelection(ocrText.length());
-        ocrText.setTextColor(TEXT);
-        ocrText.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(14));
-        ocrText.setTypeface(typeface(Typeface.NORMAL));
-        ocrText.setLineSpacing(0, 1.8f);
-        ocrText.setGravity(Gravity.TOP | Gravity.START);
-        ocrText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        ocrText.setSingleLine(false);
-        ocrText.setVerticalScrollBarEnabled(true);
-        ocrText.setBackgroundColor(Color.TRANSPARENT);
-        ocrText.setPadding(0, 0, 0, dp(26));
-        card.addView(ocrText, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        contractTextInput = new EditText(this);
+        contractTextInput.setText(getInitialText());
+        contractTextInput.setSelection(contractTextInput.length());
+        contractTextInput.setTextColor(TEXT);
+        contractTextInput.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(14));
+        contractTextInput.setTypeface(typeface(Typeface.NORMAL));
+        contractTextInput.setLineSpacing(0, 1.8f);
+        contractTextInput.setGravity(Gravity.TOP | Gravity.START);
+        contractTextInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        contractTextInput.setSingleLine(false);
+        contractTextInput.setVerticalScrollBarEnabled(true);
+        contractTextInput.setBackgroundColor(Color.TRANSPARENT);
+        contractTextInput.setPadding(0, 0, 0, dp(26));
+        card.addView(contractTextInput, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         countText = text(characterCountText(), COUNT_TEXT, 12, Typeface.NORMAL);
         countText.setGravity(Gravity.CENTER);
@@ -174,7 +176,7 @@ public class OcrEditScreen extends Activity {
         );
         card.addView(countText, countParams);
 
-        ocrText.addTextChangedListener(new TextWatcher() {
+        contractTextInput.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
             }
@@ -230,7 +232,7 @@ public class OcrEditScreen extends Activity {
         button.setBackground(roundRect(PRIMARY, dp(12), 0, 0));
         button.setOnClickListener(view -> {
             Intent intent = new Intent(OcrEditScreen.this, AnalysisResultScreen.class);
-            intent.putExtra(EXTRA_OCR_TEXT, ocrText.getText().toString());
+            intent.putExtra(EXTRA_CONTRACT_TEXT, contractTextInput.getText().toString());
             startActivity(intent);
         });
         bar.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
@@ -254,10 +256,10 @@ public class OcrEditScreen extends Activity {
     }
 
     private void insertClause(String value) {
-        int start = Math.max(ocrText.getSelectionStart(), 0);
+        int start = Math.max(contractTextInput.getSelectionStart(), 0);
         String insertion = start > 0 ? "\n" + value + ": " : value + ": ";
-        ocrText.getText().insert(start, insertion);
-        ocrText.requestFocus();
+        contractTextInput.getText().insert(start, insertion);
+        contractTextInput.requestFocus();
     }
 
     private View createProgressBar(float ratio) {
@@ -272,12 +274,15 @@ public class OcrEditScreen extends Activity {
     }
 
     private String getInitialText() {
-        String value = getIntent().getStringExtra(EXTRA_OCR_TEXT);
+        String value = getIntent().getStringExtra(EXTRA_CONTRACT_TEXT);
+        if (value == null) {
+            value = getIntent().getStringExtra(EXTRA_OCR_TEXT);
+        }
         return value == null || value.trim().isEmpty() ? DEFAULT_CONTRACT_TEXT : value;
     }
 
     private String characterCountText() {
-        return (ocrText == null ? DEFAULT_CONTRACT_TEXT.length() : ocrText.length()) + "자";
+        return (contractTextInput == null ? DEFAULT_CONTRACT_TEXT.length() : contractTextInput.length()) + "자";
     }
 
     private TextView text(String value, int color, int size, int style) {
