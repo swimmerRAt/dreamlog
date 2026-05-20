@@ -1,12 +1,12 @@
 """독소조항 탐지 학습-검증 스크립트.
 
-1) `data/contract_rule.xlsx`의 시트들을 참조 자료로 묶어 Ollama 커스텀 모델을
-   재등록한다. (시스템 프롬프트에 라벨링된 조항·법조문이 주입된다.)
+1) `data/contract_rule/` 폴더 안의 CSV 파일들을 참조 자료로 묶어 Ollama 커스텀
+   모델을 재등록한다. (시스템 프롬프트에 라벨링된 조항·법조문이 주입된다.)
 2) `data/contract_ex1.txt` 계약서를 그 모델로 분석해 독소조항 추출 결과를 출력한다.
 
 사용 예:
     python3 llm_test.py
-    python3 llm_test.py --rule ../data/contract_rule.xlsx --contract ../data/contract_ex1.txt
+    python3 llm_test.py --rule ../data/contract_rule --contract ../data/contract_ex1.txt
     python3 llm_test.py --skip-train       # 기존 모델 재사용, 분석만 수행
     python3 llm_test.py --save-json out.json
 """
@@ -14,12 +14,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import sys
 from pathlib import Path
-from typing import Any
-
-import openpyxl
 
 from llm import (
     TOXIC_DETECTOR_MODEL,
@@ -30,43 +28,46 @@ from llm import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RULE_PATH = REPO_ROOT / "data" / "contract_rule.xlsx"
+DEFAULT_RULE_PATH = REPO_ROOT / "data" / "contract_rule"
 DEFAULT_CONTRACT_PATH = REPO_ROOT / "data" / "contract_ex1.txt"
 
-# 출처 정리 시트는 학습에 불필요하므로 제외
-RULE_SHEETS = (
+# 학습에 사용할 CSV 파일명(확장자 제외). 폴더에 다른 파일이 있어도 무시되고,
+# 여기 적힌 순서대로 참조 자료에 들어간다.
+RULE_FILES = (
     "계약서_독소조항_데이터셋",
     "독소조항_수정안_페어",
     "주택임대차보호법_조문_위험도라벨",
 )
 
 
-def _row_to_text(headers: list[str], row: tuple[Any, ...]) -> str:
+def _row_to_text(headers: list[str], row: list[str]) -> str:
     parts: list[str] = []
     for h, v in zip(headers, row):
-        if v is None:
-            continue
-        sv = str(v).strip()
+        sv = (v or "").strip()
         if not sv or sv == "—":
             continue
         parts.append(f"{h}: {sv}")
     return " | ".join(parts)
 
 
-def load_rule_references(path: Path) -> list[str]:
-    """xlsx 각 시트를 한 덩어리 텍스트(독소조항 학습 자료)로 변환."""
-    wb = openpyxl.load_workbook(path, data_only=True)
-    references: list[str] = []
+def _read_csv(path: Path) -> list[list[str]]:
+    # utf-8-sig: Excel에서 저장한 BOM 있는 CSV도, 일반 utf-8 CSV도 모두 처리
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        return [row for row in csv.reader(f)]
 
-    for sn in RULE_SHEETS:
-        if sn not in wb.sheetnames:
+
+def load_rule_references(path: Path) -> list[str]:
+    """CSV 폴더 안의 각 파일을 한 덩어리 텍스트(독소조항 학습 자료)로 변환."""
+    references: list[str] = []
+    for name in RULE_FILES:
+        csv_path = path / f"{name}.csv"
+        if not csv_path.exists():
             continue
-        ws = wb[sn]
-        rows = list(ws.iter_rows(values_only=True))
+        rows = _read_csv(csv_path)
         if len(rows) < 2:
             continue
-        headers = [str(h) if h is not None else "" for h in rows[0]]
-        lines = [f"## {sn}"]
+        headers = [(h or "").strip() for h in rows[0]]
+        lines = [f"## {name}"]
         for r in rows[1:]:
             text = _row_to_text(headers, r)
             if text:
@@ -95,6 +96,11 @@ def print_result(contract_text: str, result: dict) -> None:
             print(f"      조항: {clause.get('clause', '')}")
             print(f"      이유: {clause.get('reason', '')}")
             print(f"      권장: {clause.get('recommendation', '')}")
+            script = clause.get("negotiation_script")
+            if script:
+                print(f"      📨 협상 스크립트:")
+                for line in script.splitlines():
+                    print(f"        {line}")
 
     if "error" in result:
         print(f"\n⚠️  오류: {result['error']}")
@@ -102,9 +108,9 @@ def print_result(contract_text: str, result: dict) -> None:
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="contract_rule.xlsx로 학습 후 contract_ex1.txt 분석")
+    parser = argparse.ArgumentParser(description="contract_rule/ CSV들로 학습 후 contract_ex1.txt 분석")
     parser.add_argument("--rule", type=Path, default=DEFAULT_RULE_PATH,
-                        help=f"규칙 xlsx 경로 (기본: {DEFAULT_RULE_PATH})")
+                        help=f"규칙 CSV 폴더 경로 (기본: {DEFAULT_RULE_PATH})")
     parser.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT_PATH,
                         help=f"분석할 계약서 텍스트 경로 (기본: {DEFAULT_CONTRACT_PATH})")
     parser.add_argument("--skip-train", action="store_true",
@@ -115,8 +121,8 @@ async def main() -> int:
                         help="생성된 Modelfile을 저장할 경로 (디버깅용)")
     args = parser.parse_args()
 
-    if not args.rule.exists():
-        print(f"❌ 규칙 파일 없음: {args.rule}", file=sys.stderr)
+    if not args.rule.exists() or not args.rule.is_dir():
+        print(f"❌ 규칙 폴더 없음 또는 폴더가 아님: {args.rule}", file=sys.stderr)
         return 1
     if not args.contract.exists():
         print(f"❌ 계약서 파일 없음: {args.contract}", file=sys.stderr)
@@ -131,7 +137,7 @@ async def main() -> int:
         print(f"📚 규칙 학습 자료 로드: {args.rule}")
         references = load_rule_references(args.rule)
         total_chars = sum(len(r) for r in references)
-        print(f"   {len(references)}개 시트 / 총 {total_chars:,}자")
+        print(f"   {len(references)}개 CSV / 총 {total_chars:,}자")
 
         print(f"🛠️  커스텀 모델 등록 중: {TOXIC_DETECTOR_MODEL}")
         modelfile = await create_toxic_detector(extra_references=references)

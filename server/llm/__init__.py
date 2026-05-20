@@ -14,6 +14,7 @@ from .config import (
     TEXT_MODEL,
     TOXIC_DETECTOR_MODEL,
     VISION_MODEL,
+    get_negotiation_config,
     get_text_config,
     get_toxic_detector_config,
     get_vision_config,
@@ -28,7 +29,11 @@ from .modelfile import (
 )
 from .tasks import (
     CONTRACT_OCR_PROMPT,
+    IMAGE_DESCRIPTION_PROMPT,
+    NEGOTIATION_SCRIPT_PROMPT,
     analyze_contract,
+    describe_image,
+    generate_negotiation_scripts,
     ocr_contract_image,
 )
 
@@ -42,12 +47,17 @@ __all__ = [
     "OllamaClient",
     "OllamaError",
     "CONTRACT_OCR_PROMPT",
+    "IMAGE_DESCRIPTION_PROMPT",
+    "NEGOTIATION_SCRIPT_PROMPT",
     "TOXIC_DETECTOR_SYSTEM_PROMPT",
     "analyze_contract",
     "build_model_spec",
     "build_modelfile",
     "create_toxic_detector",
+    "describe_image",
+    "generate_negotiation_scripts",
     "get_client",
+    "get_negotiation_config",
     "get_text_config",
     "get_toxic_detector_config",
     "get_vision_config",
