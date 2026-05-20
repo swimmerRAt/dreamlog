@@ -1,21 +1,13 @@
-# Android
+.local/
+.tools/
+.npm-cache/
+var/data/*.json
+spec.pdf
+target/
+.idea/
 *.iml
 .gradle/
-local.properties
-.DS_Store
 build/
+app/build/
+local.properties
 captures/
-.externalNativeBuild/
-.cxx/
-*.apk
-*.aab
-
-# Server
-server/.env
-server/__pycache__/
-server/**/__pycache__/
-server/*.db
-server/*.db-shm
-server/*.db-wal
-server/venv/
-server/.venv/
