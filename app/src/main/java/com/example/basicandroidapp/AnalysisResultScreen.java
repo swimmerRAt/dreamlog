@@ -46,7 +46,7 @@ public class AnalysisResultScreen extends Activity {
         setContentView(createView());
     }
 
-    private View createView() {
+    /*private View createView() {
         FrameLayout frame = new FrameLayout(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -70,6 +70,112 @@ public class AnalysisResultScreen extends Activity {
 
         frame.addView(bottomSheet(), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         return frame;
+    }*/
+
+    private View createView() {
+        FrameLayout frame = new FrameLayout(this);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BACKGROUND);
+        frame.addView(root, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        root.addView(topBar());
+        root.addView(progress(0.6f));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1
+        ));
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(16), dp(16), dp(12));
+        scroll.addView(content);
+
+        // ✅ popupOverlay를 미리 만들어서 GONE 상태로 추가
+        View popupOverlay = bottomSheet();
+        popupOverlay.setVisibility(View.GONE);
+
+        content.addView(scoreCard());
+        content.addView(highlightCard(popupOverlay));  // ✅ popupOverlay 전달
+        content.addView(publicDataCard());
+        root.addView(scroll);
+        root.addView(bottomBar());
+
+        frame.addView(popupOverlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        return frame;
+    }
+
+    private View bottomSheet() {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.argb(64, 0, 0, 0));
+
+        LinearLayout sheet = new LinearLayout(this);
+        sheet.setOrientation(LinearLayout.VERTICAL);
+        sheet.setPadding(dp(20), dp(12), dp(20), dp(20));
+        sheet.setBackground(topRound(Color.WHITE, dp(20)));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+        );
+        overlay.addView(sheet, params);
+
+        // ✅ 1. 배경(딤처리 영역) 터치 시 팝업 닫기
+        overlay.setOnClickListener(v -> overlay.setVisibility(View.GONE));
+
+        // ✅ 2. sheet 터치 시 배경 클릭 이벤트 차단 (sheet 클릭해도 안 닫히게)
+        sheet.setOnClickListener(v -> { /* 이벤트 소비 */ });
+
+        // ✅ 3. 드래그 다운 시 닫기
+        final float[] startY = {0};
+        sheet.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    startY[0] = event.getRawY();
+                    break;
+                case android.view.MotionEvent.ACTION_UP:
+                    float endY = event.getRawY();
+                    if (endY - startY[0] > dp(80)) {
+                        // 80dp 이상 아래로 드래그하면 닫힘
+                        overlay.setVisibility(View.GONE);
+                    }
+                    break;
+            }
+            return false;
+        });
+
+        // 핸들 바
+        View handle = new View(this);
+        handle.setBackground(roundRect(BORDER, dp(2), 0, 0));
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(36), dp(4));
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        sheet.addView(handle, handleParams);
+        sheet.addView(withTop(pill("⚠ 주의 조항", Color.rgb(255, 248, 225), WARNING_TEXT, 12), 16));
+        sheet.addView(withTop(text("수리비 일체는 임차인이 부담한다", TEXT, 17, Typeface.BOLD), 10));
+        TextView body = text(
+                "임차인이 모든 수리비를 부담하도록 하는 조항은\n민법 제623조(임대인의 수선의무)에 위반될 수 있습니다.",
+                SECONDARY, 14, Typeface.NORMAL
+        );
+        body.setLineSpacing(dp(7), 1.0f);
+        sheet.addView(withTop(body, 8));
+        View divider = new View(this);
+        divider.setBackgroundColor(BORDER);
+        LinearLayout.LayoutParams d = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+        d.setMargins(0, dp(16), 0, dp(16));
+        sheet.addView(divider, d);
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        sheet.addView(buttons);
+        buttons.addView(button("법적 근거 보기", Color.WHITE, PRIMARY, PRIMARY, 0));
+        buttons.addView(button("안전 수정안 보기", PRIMARY, Color.WHITE, 0, dp(10)));
+
+        return overlay;
     }
 
     private View topBar() {
@@ -127,7 +233,7 @@ public class AnalysisResultScreen extends Activity {
         return card;
     }
 
-    private View highlightCard() {
+    /*private View highlightCard() {
         LinearLayout card = card(12);
         card.setPadding(dp(16), dp(16), dp(16), dp(12));
         card.setOrientation(LinearLayout.VERTICAL);
@@ -153,6 +259,48 @@ public class AnalysisResultScreen extends Activity {
         card.addView(divider, dividerParams);
 
         TextView detail = text("위험 조항 2개 상세 보기  ›", PRIMARY, 13, Typeface.BOLD);
+        card.addView(detail);
+        return card;
+    }*/
+
+    private View highlightCard(View popupOverlay) {
+        LinearLayout card = card(12);
+        card.setPadding(dp(16), dp(16), dp(16), dp(12));
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setElevation(dp(2));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        card.addView(header);
+        header.addView(
+                text("원문 분석", TEXT, 16, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1)
+        );
+        header.addView(text("전체보기", PRIMARY, 13, Typeface.NORMAL));
+
+        TextView body = text("", TEXT, 14, Typeface.NORMAL);
+        body.setLineSpacing(dp(9), 1.0f);
+        body.setText(highlightedText());
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(200)
+        );
+        bodyParams.setMargins(0, dp(12), 0, 0);
+        card.addView(body, bodyParams);
+
+        // ✅ 하이라이트 텍스트 클릭 시 팝업 열기
+        body.setOnClickListener(v -> popupOverlay.setVisibility(View.VISIBLE));
+
+        View divider = new View(this);
+        divider.setBackgroundColor(BORDER);
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)
+        );
+        dividerParams.setMargins(0, dp(12), 0, dp(12));
+        card.addView(divider, dividerParams);
+
+        // ✅ "위험 조항 2개 상세 보기" 클릭 시에도 팝업 열기
+        TextView detail = text("위험 조항 2개 상세 보기  ›", PRIMARY, 13, Typeface.BOLD);
+        detail.setOnClickListener(v -> popupOverlay.setVisibility(View.VISIBLE));
         card.addView(detail);
         return card;
     }
@@ -188,13 +336,13 @@ public class AnalysisResultScreen extends Activity {
         card.setPadding(dp(16), dp(16), dp(16), dp(16));
         card.setElevation(dp(2));
         card.addView(text("공공데이터 조회 결과", TEXT, 16, Typeface.BOLD));
-        card.addView(statusRow("▣", "등기부등본", "근저당 있음", DANGER_TINT, DANGER));
+        //card.addView(statusRow("▣", "등기부등본", "근저당 있음", DANGER_TINT, DANGER));
         card.addView(statusRow("⌂", "건축물대장", "정상", SAFE_TINT, SAFE));
         card.addView(statusRow("₩", "실거래가", "시세 대비 높음", DANGER_TINT, DANGER));
         return card;
     }
 
-    private View bottomSheet() {
+   /* private View bottomSheet() {
         FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundColor(Color.argb(64, 0, 0, 0));
         LinearLayout sheet = new LinearLayout(this);
@@ -225,7 +373,7 @@ public class AnalysisResultScreen extends Activity {
         buttons.addView(button("법적 근거 보기", Color.WHITE, PRIMARY, PRIMARY, 0));
         buttons.addView(button("안전 수정안 보기", PRIMARY, Color.WHITE, 0, dp(10)));
         return overlay;
-    }
+    }*/
 
     private View bottomBar() {
         LinearLayout bar = new LinearLayout(this);

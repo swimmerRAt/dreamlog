@@ -161,7 +161,7 @@ public class ReportSummary extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(12));
         card.addView(text("공공데이터 조회", TEXT, 16, Typeface.BOLD));
-        card.addView(dataRow("등기부등본", "근저당 2건 확인", "위험", DANGER_TINT, DANGER));
+        //card.addView(dataRow("등기부등본", "근저당 2건 확인", "위험", DANGER_TINT, DANGER));
         card.addView(dataRow("건축물대장", "주거용 정상 등록", "안전", SAFE_TINT, SAFE));
         card.addView(dataRow("실거래가", "시세 대비 8% 초과", "위험", DANGER_TINT, DANGER));
         return card;
