@@ -8,7 +8,7 @@ Ollama Modelfile을 생성하고 `ollama create`로 등록한다.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from .client import OllamaClient, get_client
 from .config import TEXT_MODEL, TOXIC_DETECTOR_MODEL
@@ -192,10 +192,12 @@ async def create_toxic_detector(
     references_dir: Optional[str | Path] = None,
     extra_references: Optional[Iterable[str]] = None,
     client: Optional[OllamaClient] = None,
+    progress: Optional[Callable[[dict[str, Any]], None]] = None,
 ) -> str:
     """독소조항 탐지 커스텀 모델을 Ollama에 등록한다.
 
     references_dir이 지정되면 그 안의 텍스트 파일을 참조 자료로 사용한다.
+    progress 콜백을 넘기면 `/api/create` 스트리밍 status 청크가 그대로 전달된다.
     반환값은 등록에 사용한 Modelfile 문자열 (디버깅/저장용).
     """
     cli = client or get_client()
@@ -213,6 +215,7 @@ async def create_toxic_detector(
         from_model=spec["from"],
         system=spec["system"],
         parameters=spec["parameters"],
+        progress=progress,
     )
     # 디버깅/저장용 Modelfile 문자열 표현을 반환
     return build_modelfile(base_model=base_model, references=refs or None)

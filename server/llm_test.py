@@ -64,24 +64,57 @@ def _read_csv(path: Path) -> list[list[str]]:
         return [row for row in csv.reader(f)]
 
 
-def load_rule_references(path: Path) -> list[str]:
-    """CSV 폴더 안의 각 파일을 한 덩어리 텍스트(독소조항 학습 자료)로 변환."""
+def load_rule_references(path: Path, *, verbose: bool = True) -> list[str]:
+    """CSV 폴더 안의 각 파일을 한 덩어리 텍스트(독소조항 학습 자료)로 변환.
+
+    verbose=True 면 각 CSV의 읽기/변환 진행 상황을 stdout에 단계별로 찍는다.
+    """
     references: list[str] = []
-    for name in RULE_FILES:
+    total = len(RULE_FILES)
+    for idx, name in enumerate(RULE_FILES, 1):
         csv_path = path / f"{name}.csv"
         if not csv_path.exists():
+            if verbose:
+                print(f"📂 [{idx}/{total}] {csv_path.name} — ❌ 파일 없음, 건너뜀")
             continue
+        if verbose:
+            print(f"📂 [{idx}/{total}] {csv_path.name}")
+            print(f"   ├─ CSV 읽는 중...")
         rows = _read_csv(csv_path)
         if len(rows) < 2:
+            if verbose:
+                print(f"   └─ ⚠️ 데이터 행이 없어 건너뜀")
             continue
+        data_rows = rows[1:]
+        if verbose:
+            print(f"   ├─ ✅ 로드: 헤더 1행 + 데이터 {len(data_rows)}행")
+
         headers = [(h or "").strip() for h in rows[0]]
         lines = [f"## {name}"]
-        for r in rows[1:]:
+        converted = 0
+        skipped = 0
+        # 행 수에 비례한 진행 표시 단위(최소 1, 너무 잦으면 시끄러우니 ~10단계로 끊음)
+        step = max(1, len(data_rows) // 10)
+        for i, r in enumerate(data_rows, 1):
             text = _row_to_text(headers, r)
             if text:
                 lines.append(f"- {text}")
+                converted += 1
+            else:
+                skipped += 1
+            if verbose and (i % step == 0 or i == len(data_rows)):
+                print(f"   ├─ 행 변환: {i}/{len(data_rows)}")
+
         if len(lines) > 1:
-            references.append("\n".join(lines))
+            chunk = "\n".join(lines)
+            references.append(chunk)
+            if verbose:
+                print(
+                    f"   └─ 🧩 참조 자료 생성: {converted}행 채택 / {skipped}행 비어있음 "
+                    f"→ {len(chunk):,}자"
+                )
+        elif verbose:
+            print(f"   └─ ⚠️ 변환된 행이 없어 참조 자료 미생성")
     return references
 
 
@@ -145,11 +178,25 @@ async def main() -> int:
         print(f"📚 규칙 학습 자료 로드: {args.rule}")
         references = load_rule_references(args.rule)
         total_chars = sum(len(r) for r in references)
-        print(f"   {len(references)}개 CSV / 총 {total_chars:,}자")
+        print(f"📊 요약: {len(references)}개 CSV / 총 {total_chars:,}자\n")
 
         print(f"🛠️  커스텀 모델 등록 중: {TOXIC_DETECTOR_MODEL}")
-        modelfile = await create_toxic_detector(extra_references=references)
-        print(f"   완료 (Modelfile {len(modelfile):,}자)")
+        seen_statuses: set[str] = set()
+
+        def _on_create(chunk: dict) -> None:
+            # Ollama /api/create 는 {"status": "..."} 형태 청크를 흘려보낸다.
+            # 같은 status가 여러 번 오기도 하므로 중복은 한 번만 표시.
+            status = chunk.get("status")
+            if not status or status in seen_statuses:
+                return
+            seen_statuses.add(status)
+            print(f"   ↳ {status}")
+
+        modelfile = await create_toxic_detector(
+            extra_references=references,
+            progress=_on_create,
+        )
+        print(f"✅ 등록 완료 (Modelfile {len(modelfile):,}자)")
         if args.save_modelfile:
             args.save_modelfile.write_text(modelfile, encoding="utf-8")
             print(f"   Modelfile 저장: {args.save_modelfile}")

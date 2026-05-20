@@ -9,7 +9,7 @@ import base64
 import json
 import os
 import sys
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 
 import httpx
 
@@ -88,11 +88,13 @@ class OllamaClient:
         from_model: str,
         system: Optional[str] = None,
         parameters: Optional[dict[str, Any]] = None,
+        progress: Optional[Callable[[dict[str, Any]], None]] = None,
     ) -> None:
         """구조화된 페이로드로 커스텀 모델을 등록한다.
 
         Ollama 신 API(`/api/create`)는 `modelfile` 문자열 대신
         `from`/`system`/`parameters` 등 필드를 받는다.
+        progress 콜백을 넘기면 스트리밍되는 각 status 청크를 그대로 전달한다.
         """
         payload: dict[str, Any] = {
             "model": name,
@@ -120,6 +122,8 @@ class OllamaClient:
                         continue
                     if chunk.get("error"):
                         raise OllamaError(chunk["error"])
+                    if progress is not None:
+                        progress(chunk)
 
     async def delete_model(self, name: str) -> None:
         async with self._client() as client:
