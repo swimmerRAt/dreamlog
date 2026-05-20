@@ -34,15 +34,23 @@ DEFAULT_CONTRACT_PATH = REPO_ROOT / "data" / "contract_ex1.txt"
 # 학습에 사용할 CSV 파일명(확장자 제외). 폴더에 다른 파일이 있어도 무시되고,
 # 여기 적힌 순서대로 참조 자료에 들어간다.
 RULE_FILES = (
-    "계약서_독소조항_데이터셋",
-    "독소조항_수정안_페어",
-    "주택임대차보호법_조문_위험도라벨",
+    "jeonse_clause_dataset",
 )
+
+# 참조 자료에 포함하지 않을 칼럼(메타데이터/중복 라벨 등).
+SKIP_COLUMNS = frozenset({
+    "sample_id",
+    "source_page",
+    "source_kind",
+    "label_json",
+})
 
 
 def _row_to_text(headers: list[str], row: list[str]) -> str:
     parts: list[str] = []
     for h, v in zip(headers, row):
+        if h in SKIP_COLUMNS:
+            continue
         sv = (v or "").strip()
         if not sv or sv == "—":
             continue
