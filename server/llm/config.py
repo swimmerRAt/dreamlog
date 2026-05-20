@@ -99,6 +99,21 @@ def get_text_config() -> LLMConfig:
     )
 
 
+def get_negotiation_config() -> LLMConfig:
+    """협상 스크립트 생성용 텍스트 모델 설정.
+
+    토픽이 정해진 짧은 메시지 작성이라 결정성은 약하게 풀어두고
+    (temperature 0.3) 자연스러운 문장이 나오도록 한다.
+    JSON 강제는 사용하지 않는다(평문 메시지가 출력 그 자체).
+    """
+    return LLMConfig(
+        model=TEXT_MODEL,
+        temperature=0.3,
+        top_p=0.9,
+        num_ctx=4096,
+    )
+
+
 def get_toxic_detector_config() -> LLMConfig:
     """독소조항 탐지용 JSON 출력 고정 설정.
 

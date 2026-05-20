@@ -96,6 +96,11 @@ def print_result(contract_text: str, result: dict) -> None:
             print(f"      조항: {clause.get('clause', '')}")
             print(f"      이유: {clause.get('reason', '')}")
             print(f"      권장: {clause.get('recommendation', '')}")
+            script = clause.get("negotiation_script")
+            if script:
+                print(f"      📨 협상 스크립트:")
+                for line in script.splitlines():
+                    print(f"        {line}")
 
     if "error" in result:
         print(f"\n⚠️  오류: {result['error']}")

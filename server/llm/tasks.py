@@ -9,10 +9,12 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from .client import OllamaClient, OllamaError, get_client
 from .config import (
+    get_negotiation_config,
     get_text_config,
     get_toxic_detector_config,
 )
@@ -85,6 +87,24 @@ IMAGE_DESCRIPTION_PROMPT = """이미지를 한 줄로 사실 그대로 묘사하
 추론·해석·내용 요약은 절대 하지 마세요. 한 줄로만 응답하세요."""
 
 
+NEGOTIATION_SCRIPT_PROMPT = """당신은 세입자가 임대인에게 보낼 협상 메시지를 작성합니다.
+
+세입자 입장에서 아래 독소조항을 임대인과 협상하기 위한 정중한 한국어 스크립트를 작성하세요.
+문자메시지·카카오톡·이메일 본문으로 그대로 보낼 수 있는 완성된 글이어야 합니다.
+
+[작성 규칙]
+1. 한국어 존댓말. 3~5문장 분량. 너무 길지 않게.
+2. 다음 흐름을 따른다:
+   (a) "임대인님 안녕하세요" 같은 정중한 인사
+   (b) 협상하고 싶은 조항을 짧게 인용·언급
+   (c) 어떤 점이 부담스러운지 + 관련 법령(주택임대차보호법 / 민법 등) 한 가지 이상 근거 제시
+   (d) 어떻게 수정 또는 삭제하면 좋을지 구체적인 대안 제안
+   (e) "검토 부탁드립니다" 식 정중한 마무리
+3. 절대 금지: 협박·비난·반말·욕설, "위약금 청구하겠다" 같은 압박, 임대인을 가르치는 어조.
+4. 머리말("협상 스크립트:" 등 라벨)이나 부가 설명 없이 메시지 본문만 출력.
+5. 결과는 평문 텍스트. JSON·마크다운·코드블록 사용 금지."""
+
+
 FALLBACK_ANALYSIS_PROMPT = (
     TOXIC_DETECTOR_SYSTEM_PROMPT
     + "\n\n[계약서 내용]\n{contract_text}\n"
@@ -118,12 +138,69 @@ async def ocr_contract_image(
     )
 
 
+_SCRIPT_HEADER_RE = re.compile(
+    r"^\s*(협상\s*스크립트|메시지|스크립트|message|negotiation\s*script)\s*[:：]\s*\n",
+    re.IGNORECASE,
+)
+
+
+def _clean_negotiation_script(text: str) -> str:
+    """모델이 종종 첫 줄에 붙이는 '협상 스크립트:' 류 머리말을 제거한다."""
+    cleaned = text.strip()
+    cleaned = _SCRIPT_HEADER_RE.sub("", cleaned, count=1)
+    return cleaned.strip()
+
+
+async def generate_negotiation_scripts(
+    toxic_clauses: list[dict[str, str]],
+    *,
+    client: Optional[OllamaClient] = None,
+) -> list[str]:
+    """각 독소조항에 대해 임대인과의 협상에 그대로 쓸 수 있는 메시지를 생성한다.
+
+    Args:
+        toxic_clauses: `analyze_contract`가 반환한 toxic_clauses 형식 리스트.
+            각 항목은 `clause` / `reason` / `recommendation`을 갖는다.
+        client: 재사용할 Ollama 클라이언트.
+
+    Returns:
+        toxic_clauses와 같은 길이·순서의 스크립트 문자열 리스트.
+        개별 호출이 실패한 항목은 빈 문자열로 채워 자리만 맞춘다(인덱스 정렬 유지).
+    """
+    if not toxic_clauses:
+        return []
+    cli = client or get_client()
+    cfg = get_negotiation_config()
+
+    scripts: list[str] = []
+    for clause in toxic_clauses:
+        prompt = (
+            NEGOTIATION_SCRIPT_PROMPT
+            + f"\n\n[독소 조항 원문]\n{clause.get('clause', '')}"
+            + f"\n\n[조항의 문제점]\n{clause.get('reason', '')}"
+            + f"\n\n[수정 방향]\n{clause.get('recommendation', '')}"
+            + "\n\n이제 위 조항을 협상하기 위한 메시지 본문을 작성하세요."
+        )
+        try:
+            text = await cli.generate(prompt, cfg)
+        except OllamaError:
+            text = ""
+        scripts.append(_clean_negotiation_script(text))
+    return scripts
+
+
 async def analyze_contract(
     contract_text: str,
     *,
     client: Optional[OllamaClient] = None,
+    include_scripts: bool = True,
 ) -> dict[str, Any]:
-    """계약서 텍스트에서 독소조항을 분석해 JSON으로 반환한다."""
+    """계약서 텍스트에서 독소조항을 분석해 JSON으로 반환한다.
+
+    `include_scripts=True`(기본)면 발견된 독소조항마다 임대인 협상용 메시지를
+    `negotiation_script` 필드에 추가로 채워준다. 호출 횟수가 독소조항 개수만큼
+    늘어나니, 단순 검출만 필요한 경로(배치 평가 등)에서는 False로 호출한다.
+    """
     cli = client or get_client()
     cfg = get_toxic_detector_config()
 
@@ -144,4 +221,11 @@ async def analyze_contract(
             "toxic_clauses": [],
             "error": str(e),
         }
-    return _normalize_analysis(raw)
+    result = _normalize_analysis(raw)
+
+    if include_scripts and result["toxic_clauses"]:
+        scripts = await generate_negotiation_scripts(result["toxic_clauses"], client=cli)
+        for clause, script in zip(result["toxic_clauses"], scripts):
+            clause["negotiation_script"] = script
+
+    return result
