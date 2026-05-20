@@ -18,6 +18,24 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BasicAndroidApp" >
         <activity
+            android:name="com.example.basicandroidapp.ExpertComment"
+            android:exported="false" />
+        <activity
+            android:name="com.example.basicandroidapp.ReportSummary"
+            android:exported="false" />
+        <activity
+            android:name="com.example.basicandroidapp.AnalysisResultScreen"
+            android:exported="false" />
+        <activity
+            android:name="com.example.basicandroidapp.OcrEditScreen"
+            android:exported="false" />
+        <activity
+            android:name="com.example.basicandroidapp.ContractInput"
+            android:exported="false" />
+        <activity
+            android:name="com.example.basicandroidapp.Login"
+            android:exported="false" />
+        <activity
             android:name="com.example.basicandroidapp.MainActivity"
             android:exported="true" >
             <intent-filter>
