@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime, timezone
 import os
@@ -31,6 +31,7 @@ class Analysis(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     original_text = Column(Text, nullable=False)
+    address = Column(String, nullable=False, default="")
     toxic_clauses = Column(Text, nullable=False)
     summary = Column(Text, nullable=False)
     risk_level = Column(String, nullable=False)
@@ -49,3 +50,10 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # 기존 DB에 address 컬럼이 없을 때 마이그레이션
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE analyses ADD COLUMN address TEXT NOT NULL DEFAULT ''"))
+            conn.commit()
+        except Exception:
+            pass  # 이미 존재하면 무시

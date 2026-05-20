@@ -1,99 +1,29 @@
 {
     "logs": [
         {
-            "outputFile": "/Users/suyeong/.gradle/daemon/8.9/com.example.basicandroidapp-mergeDebugResources-2:/values/values.xml",
+            "outputFile": "com.example.basicandroidapp-mergeDebugResources-2:/values/values.xml",
             "map": [
                 {
-                    "source": "/Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res/values/styles.xml",
+                    "source": "/Users/suyeong/Library/Mobile Documents/com~apple~CloudDocs/temp_workspace/dreamlog/app/src/main/res/values/styles.xml",
                     "from": {
                         "startLines": "1",
                         "startColumns": "4",
                         "startOffsets": "16",
-                        "endLines": "7",
+                        "endLines": "11",
                         "endColumns": "12",
-                        "endOffsets": "438"
+                        "endOffsets": "699"
                     },
                     "to": {
                         "startLines": "7",
                         "startColumns": "4",
-                        "startOffsets": "297",
-                        "endLines": "13",
+                        "startOffsets": "282",
+                        "endLines": "17",
                         "endColumns": "12",
-                        "endOffsets": "719"
+                        "endOffsets": "965"
                     }
                 },
                 {
-                    "source": "/Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res/values/colors.xml",
-                    "from": {
-                        "startLines": "1,2,3",
-                        "startColumns": "4,4,4",
-                        "startOffsets": "16,58,105",
-                        "endColumns": "41,46,39",
-                        "endOffsets": "53,100,140"
-                    },
-                    "to": {
-                        "startLines": "2,3,4",
-                        "startColumns": "4,4,4",
-                        "startOffsets": "55,97,144",
-                        "endColumns": "41,46,39",
-                        "endOffsets": "92,139,179"
-                    }
-                },
-                {
-                    "source": "/Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res/values/strings.xml",
-                    "from": {
-                        "startLines": "1,2",
-                        "startColumns": "4,4",
-                        "startOffsets": "16,71",
-                        "endColumns": "54,57",
-                        "endOffsets": "66,124"
-                    },
-                    "to": {
-                        "startLines": "5,6",
-                        "startColumns": "4,4",
-                        "startOffsets": "184,239",
-                        "endColumns": "54,57",
-                        "endOffsets": "234,292"
-                    }
-                }
-            ]
-        },
-        {
-            "outputFile": "com.example.basicandroidapp-mergeDebugResources-2:/values/values.xml",
-            "map": [
-                {
-                    "source": "/Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res/values/styles.xml",
-                    "from": {
-                        "startLines": "-1",
-                        "startColumns": "-1",
-                        "startOffsets": "-1"
-                    },
-                    "to": {
-                        "startLines": "6",
-                        "startColumns": "4",
-                        "startOffsets": "230",
-                        "endLines": "12",
-                        "endColumns": "12",
-                        "endOffsets": "652"
-                    }
-                },
-                {
-                    "source": "/Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res/values/colors.xml",
-                    "from": {
-                        "startLines": "-1,-1,-1",
-                        "startColumns": "-1,-1,-1",
-                        "startOffsets": "-1,-1,-1"
-                    },
-                    "to": {
-                        "startLines": "2,3,4",
-                        "startColumns": "4,4,4",
-                        "startOffsets": "55,97,144",
-                        "endColumns": "41,46,39",
-                        "endOffsets": "92,139,179"
-                    }
-                },
-                {
-                    "source": "/Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res/values/strings.xml",
+                    "source": "/Users/suyeong/Library/Mobile Documents/com~apple~CloudDocs/temp_workspace/dreamlog/app/src/main/res/values/strings.xml",
                     "from": {
                         "startLines": "1",
                         "startColumns": "4",
@@ -102,11 +32,28 @@
                         "endOffsets": "57"
                     },
                     "to": {
-                        "startLines": "5",
+                        "startLines": "6",
                         "startColumns": "4",
-                        "startOffsets": "184",
+                        "startOffsets": "236",
                         "endColumns": "45",
-                        "endOffsets": "225"
+                        "endOffsets": "277"
+                    }
+                },
+                {
+                    "source": "/Users/suyeong/Library/Mobile Documents/com~apple~CloudDocs/temp_workspace/dreamlog/app/src/main/res/values/colors.xml",
+                    "from": {
+                        "startLines": "1,2,3,4",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "16,58,105,157",
+                        "endColumns": "41,46,51,39",
+                        "endOffsets": "53,100,152,192"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "55,97,144,196",
+                        "endColumns": "41,46,51,39",
+                        "endOffsets": "92,139,191,231"
                     }
                 }
             ]
