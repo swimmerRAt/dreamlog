@@ -514,6 +514,53 @@ public class ReportSummary extends Activity {
     }
 
     private void savePdf() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            savePdfToDownloads();
+        } else {
+            savePdfViaPrint();
+        }
+    }
+
+    @android.annotation.TargetApi(android.os.Build.VERSION_CODES.Q)
+    private void savePdfToDownloads() {
+        new Thread(() -> {
+            String fileName = (address.isEmpty() ? "계약서_분석_리포트"
+                    : address.replace(" ", "_") + "_리포트") + ".pdf";
+
+            android.content.ContentValues cv = new android.content.ContentValues();
+            cv.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName);
+            cv.put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/pdf");
+            cv.put(android.provider.MediaStore.Downloads.IS_PENDING, 1);
+
+            android.net.Uri uri = getContentResolver()
+                    .insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+            if (uri == null) {
+                runOnUiThread(() -> Toast.makeText(this, "저장 경로를 만들 수 없습니다.", Toast.LENGTH_SHORT).show());
+                return;
+            }
+            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "w")) {
+                if (pfd == null) throw new IOException("파일 열기 실패");
+                PdfDocument pdf = new PdfDocument();
+                PdfDocument.Page page = pdf.startPage(
+                        new PdfDocument.PageInfo.Builder(595, 842, 1).create());
+                drawReportOnCanvas(page.getCanvas());
+                pdf.finishPage(page);
+                try (FileOutputStream fos = new FileOutputStream(pfd.getFileDescriptor())) {
+                    pdf.writeTo(fos);
+                }
+                pdf.close();
+                cv.clear();
+                cv.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
+                getContentResolver().update(uri, cv, null, null);
+                runOnUiThread(() -> Toast.makeText(this, "다운로드 폴더에 저장되었습니다.", Toast.LENGTH_SHORT).show());
+            } catch (IOException e) {
+                getContentResolver().delete(uri, null, null);
+                runOnUiThread(() -> Toast.makeText(this, "저장에 실패했습니다.", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    private void savePdfViaPrint() {
         PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
         if (pm == null) {
             Toast.makeText(this, "인쇄 서비스를 사용할 수 없습니다.", Toast.LENGTH_SHORT).show();

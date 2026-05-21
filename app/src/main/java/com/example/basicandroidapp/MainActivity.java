@@ -45,7 +45,9 @@ public class MainActivity extends Activity {
             pageView = wrapWithBottomNav(new Mypage(this, () -> showPage(Page.LOGIN)).createView(), page);
         }
 
-        pageView.setForceDarkAllowed(false);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            pageView.setForceDarkAllowed(false);
+        }
         setContentView(pageView);
     }
 
