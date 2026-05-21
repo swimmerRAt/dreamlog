@@ -68,7 +68,7 @@ public class ExpertComment extends Activity {
         content.addView(infoSection());
 
         root.addView(scroll);
-        root.addView(bottomBar());
+        root.addView(bottomBar(dangerCount, cautionCount));
         return root;
     }
 
@@ -254,7 +254,7 @@ public class ExpertComment extends Activity {
         return wrapper;
     }
 
-    private View bottomBar() {
+    private View bottomBar(int dangerCount, int cautionCount) {
         LinearLayout bar = new LinearLayout(this);
         bar.setPadding(dp(16), dp(12), dp(16), dp(24));
         bar.setBackgroundColor(CARD);
@@ -263,8 +263,28 @@ public class ExpertComment extends Activity {
         TextView button = text("전문가에게 리포트 공유하기  →", Color.WHITE, 16, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
         button.setBackground(roundRect(PRIMARY, dp(12), 0, 0));
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setOnClickListener(v -> shareReport(dangerCount, cautionCount));
         bar.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
         return bar;
+    }
+
+    private void shareReport(int dangerCount, int cautionCount) {
+        String reportText = "[드림로그 계약서 분석 결과]\n"
+                + "위험 조항: " + dangerCount + "건\n"
+                + "주의 조항: " + cautionCount + "건\n"
+                + "\n전문가에게 상담을 요청합니다.";
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, reportText);
+        intent.setPackage("com.kakao.talk");
+        try {
+            startActivity(intent);
+        } catch (android.content.ActivityNotFoundException e) {
+            intent.setPackage(null);
+            startActivity(Intent.createChooser(intent, "리포트 공유"));
+        }
     }
 
     private View heroPill(String value, int left) {

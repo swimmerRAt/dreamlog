@@ -45,8 +45,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class OcrEditScreen extends Activity {
-    @Deprecated
-    static final String EXTRA_OCR_TEXT = "ocr_text";
     static final String EXTRA_CONTRACT_TEXT = ApiContract.EXTRA_CONTRACT_TEXT;
     static final String EXTRA_MODE = "mode";
     static final String MODE_CAMERA = "camera";
