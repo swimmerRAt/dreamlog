@@ -131,14 +131,10 @@ public class AnalysisResultScreen extends Activity {
         try {
             JSONObject obj = new JSONObject(json);
             riskLevel = obj.optString("risk_level", "알 수 없음");
+            score = obj.optInt("risk_score", 62);  // 서버에서 전달받은 점수 사용
             summary = obj.optString("summary", "");
             analysisDate = obj.optString("created_at", "");
             if (analysisDate.length() > 10) analysisDate = analysisDate.substring(0, 10);
-
-            // 위험도에 따라 점수 산정
-            if (riskLevel.contains("낮")) score = 85;
-            else if (riskLevel.contains("높")) score = 35;
-            else score = 62;
 
             JSONArray clauses = obj.optJSONArray("toxic_clauses");
             if (clauses != null) {
