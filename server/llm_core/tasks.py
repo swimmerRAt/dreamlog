@@ -187,7 +187,7 @@ _ADDRESS_UNKNOWN = "주소 불명"
 ADDRESS_EXTRACT_PROMPT = (
     "계약서 텍스트에서 임차주택(계약 대상 건물)의 주소를 추출하세요.\n"
     '반드시 아래 JSON 형식만 출력하세요: {{"address": "전체 주소"}}\n'
-    f'{{"address": "{_ADDRESS_UNKNOWN}"}}을 찾을 수 없으면 위 형식으로 출력하세요.\n\n'
+    '주소를 찾을 수 없으면 {{"address": "' + _ADDRESS_UNKNOWN + '"}} 형식으로 출력하세요.\n\n'
     "[계약서 내용]\n{contract_text}"
 )
 
