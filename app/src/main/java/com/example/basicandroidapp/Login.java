@@ -1,6 +1,8 @@
 package com.example.basicandroidapp;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -23,6 +25,16 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
+import java.io.IOException;
+
+import okhttp3.FormBody;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 public class Login extends Activity {
     private static final int PRIMARY = Color.rgb(63, 81, 181);
     private static final int TEXT = Color.rgb(33, 33, 33);
@@ -32,11 +44,19 @@ public class Login extends Activity {
     private static final int INPUT_BG = Color.rgb(248, 249, 250);
     private static final int GOOGLE_BLUE = Color.rgb(66, 133, 244);
 
+    // 안드로이드 에뮬레이터에서 Mac 호스트의 로컬호스트를 가리키는 고정 주소
+    @SuppressWarnings("java:S1313")
+    private static final String BASE_URL = "http://10.0.2.2:8000";
+    static final String PREFS_NAME = "dreamlog_prefs";
+    static final String KEY_TOKEN = "access_token";
+
     private Activity hostActivity;
     private Runnable onLogin;
     private Runnable onSignup;
     private EditText editEmail;
     private EditText editPassword;
+
+    private final OkHttpClient httpClient = new OkHttpClient();
 
     public Login() {
         hostActivity = this;
@@ -128,7 +148,7 @@ public class Login extends Activity {
         card.addView(text("간편하게 시작하기", 18, TEXT, Typeface.BOLD, Gravity.CENTER, 0));
         card.addView(text("소셜 계정으로 3초만에 로그인", 13, SECONDARY, Typeface.NORMAL, Gravity.CENTER, dp(6)));
         card.addView(socialButton("G", GOOGLE_BLUE, "Google로 계속하기", Color.WHITE, TEXT, dp(24)));
-        card.addView(socialButton("", Color.WHITE, "Apple로 계속하기", Color.BLACK, Color.WHITE, dp(12)));
+        card.addView(socialButton("", Color.WHITE, "Apple로 계속하기", Color.BLACK, Color.WHITE, dp(12)));
         card.addView(divider());
         editEmail = input("이메일 주소", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, dp(16));
         editPassword = input("비밀번호", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10));
@@ -227,29 +247,7 @@ public class Login extends Activity {
         button.setClickable(true);
         button.setFocusable(true);
         button.setBackground(roundRect(PRIMARY, dp(12), 0, 0));
-        button.setOnClickListener(view -> {
-            String email = editEmail.getText().toString().trim();
-            String password = editPassword.getText().toString();
-
-            if (email.isEmpty()) {
-                Toast.makeText(hostActivity, "이메일을 입력해주세요", Toast.LENGTH_SHORT).show();
-                editEmail.requestFocus();
-                return;
-            }
-            if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                Toast.makeText(hostActivity, "올바른 이메일 형식을 입력해주세요", Toast.LENGTH_SHORT).show();
-                editEmail.requestFocus();
-                return;
-            }
-            if (password.isEmpty()) {
-                Toast.makeText(hostActivity, "비밀번호를 입력해주세요", Toast.LENGTH_SHORT).show();
-                editPassword.requestFocus();
-                return;
-            }
-            if (onLogin != null) {
-                onLogin.run();
-            }
-        });
+        button.setOnClickListener(view -> performLogin());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(52)
@@ -257,6 +255,63 @@ public class Login extends Activity {
         params.setMargins(0, dp(16), 0, 0);
         button.setLayoutParams(params);
         return button;
+    }
+
+    private void performLogin() {
+        String email = editEmail.getText().toString().trim();
+        String password = editPassword.getText().toString();
+
+        if (email.isEmpty() || password.isEmpty()) {
+            Toast.makeText(hostActivity, "이메일과 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 서버는 OAuth2PasswordRequestForm: username/password 필드로 받음
+        RequestBody body = new FormBody.Builder()
+                .add("username", email)
+                .add("password", password)
+                .build();
+
+        Request request = new Request.Builder()
+                .url(BASE_URL + "/auth/login")
+                .post(body)
+                .build();
+
+        new Thread(() -> {
+            try (Response response = httpClient.newCall(request).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                handleLoginResponse(response.isSuccessful(), responseBody);
+            } catch (IOException | org.json.JSONException e) {
+                hostActivity.runOnUiThread(() ->
+                        Toast.makeText(hostActivity, "서버에 연결할 수 없습니다.", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    private void handleLoginResponse(boolean success, String responseBody) throws org.json.JSONException {
+        if (success) {
+            JSONObject json = new JSONObject(responseBody);
+            String token = json.getString(KEY_TOKEN);
+            SharedPreferences prefs = hostActivity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().putString(KEY_TOKEN, token).apply();
+            hostActivity.runOnUiThread(() -> {
+                if (onLogin != null) onLogin.run();
+            });
+        } else {
+            String message = parseErrorMessage(responseBody);
+            hostActivity.runOnUiThread(() ->
+                    Toast.makeText(hostActivity, message, Toast.LENGTH_SHORT).show());
+        }
+    }
+
+    private String parseErrorMessage(String responseBody) {
+        try {
+            JSONObject err = new JSONObject(responseBody);
+            if (err.has("detail")) return err.getString("detail");
+        } catch (Exception ignored) {
+            // JSON 파싱 실패 시 기본 메시지 사용
+        }
+        return "로그인 실패";
     }
 
     private View signupLink() {
