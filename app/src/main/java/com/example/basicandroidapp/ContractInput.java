@@ -132,9 +132,9 @@ public class ContractInput extends Activity {
         buttonsParams.setMargins(0, dp(16), 0, 0);
         buttons.setLayoutParams(buttonsParams);
 
-        buttons.addView(createActionButton("촬영", true, 0));
-        buttons.addView(createActionButton("갤러리", false, dp(10)));
-        buttons.addView(createActionButton("직접 입력", false, dp(10)));
+        buttons.addView(createActionButton("촬영", true, 0, OcrEditScreen.MODE_CAMERA));
+        buttons.addView(createActionButton("갤러리", false, dp(10), OcrEditScreen.MODE_GALLERY));
+        buttons.addView(createActionButton("직접 입력", false, dp(10), OcrEditScreen.MODE_TEXT));
         sheet.addView(buttons);
 
         TextView caption = label("JPG · PNG · PDF 지원", MUTED, 11, Typeface.NORMAL);
@@ -148,7 +148,7 @@ public class ContractInput extends Activity {
         return sheet;
     }
 
-    private View createActionButton(String label, boolean primary, int leftMargin) {
+    private View createActionButton(String label, boolean primary, int leftMargin, String mode) {
         TextView button = label(label, primary ? Color.WHITE : PRIMARY, 13, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
         button.setClickable(true);
@@ -156,7 +156,7 @@ public class ContractInput extends Activity {
         button.setBackground(primary
                 ? roundRect(PRIMARY, dp(10), 0, 0)
                 : roundRect(Color.WHITE, dp(10), PRIMARY, Math.max(1, dp(1.5f))));
-        button.setOnClickListener(view -> openOcrEditScreen());
+        button.setOnClickListener(view -> openOcrEditScreen(mode));
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 0,
@@ -168,9 +168,9 @@ public class ContractInput extends Activity {
         return button;
     }
 
-    private void openOcrEditScreen() {
+    private void openOcrEditScreen(String mode) {
         Intent intent = new Intent(hostActivity, OcrEditScreen.class);
-        intent.putExtra(OcrEditScreen.EXTRA_CONTRACT_TEXT, OcrEditScreen.DEFAULT_CONTRACT_TEXT);
+        intent.putExtra(OcrEditScreen.EXTRA_MODE, mode);
         hostActivity.startActivity(intent);
     }
 

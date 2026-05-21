@@ -5,11 +5,13 @@ from database import init_db
 from auth.router import router as auth_router
 from contract.router import router as contract_router
 from llm_core import get_client
+from public_data import load_all as load_public_data
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    load_public_data()
     ollama_ok = await get_client().health()
     if not ollama_ok:
         print("⚠️  경고: Ollama 서버에 연결할 수 없습니다. 'ollama serve'를 실행했는지 확인해주세요.")

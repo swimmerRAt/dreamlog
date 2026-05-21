@@ -18,24 +18,101 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class ReportSummary extends Activity {
-    private static final int BACKGROUND = Color.rgb(248, 249, 250);
-    private static final int PRIMARY = Color.rgb(63, 81, 181);
-    private static final int TEXT = Color.rgb(33, 33, 33);
-    private static final int SECONDARY = Color.rgb(117, 117, 117);
-    private static final int BORDER = Color.rgb(224, 224, 224);
-    private static final int DANGER = Color.rgb(244, 67, 54);
+    private static final int BACKGROUND  = Color.rgb(248, 249, 250);
+    private static final int PRIMARY     = Color.rgb(63, 81, 181);
+    private static final int TEXT        = Color.rgb(33, 33, 33);
+    private static final int SECONDARY   = Color.rgb(117, 117, 117);
+    private static final int BORDER      = Color.rgb(224, 224, 224);
+    private static final int DANGER      = Color.rgb(244, 67, 54);
     private static final int DANGER_TINT = Color.rgb(255, 235, 238);
-    private static final int WARNING = Color.rgb(255, 193, 7);
+    private static final int WARNING     = Color.rgb(255, 193, 7);
     private static final int WARNING_TEXT = Color.rgb(245, 127, 23);
     private static final int WARNING_TINT = Color.rgb(255, 248, 225);
-    private static final int SAFE = Color.rgb(76, 175, 80);
-    private static final int SAFE_TINT = Color.rgb(232, 245, 233);
+    private static final int SAFE        = Color.rgb(76, 175, 80);
+    private static final int SAFE_TINT   = Color.rgb(232, 245, 233);
+
+    private String address = "";
+    private String riskLevel = "중간";
+    private String summary = "";
+    private int score = 62;
+    private int dangerCount = 0;
+    private int cautionCount = 0;
+    private final List<AnalysisResultScreen.ToxicClause> dangerClauses = new ArrayList<>();
+    private final List<AnalysisResultScreen.ToxicClause> cautionClauses = new ArrayList<>();
+    private final List<AnalysisResultScreen.BuildingInfo> buildingInfoList = new ArrayList<>();
+    private final List<AnalysisResultScreen.TradeInfo> recentTrades = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        parseAnalysisResult(getIntent().getStringExtra(AnalysisResultScreen.EXTRA_ANALYSIS_RESULT));
         setContentView(createView());
+    }
+
+    private void parseAnalysisResult(String json) {
+        if (json == null || json.isEmpty()) return;
+        try {
+            JSONObject obj = new JSONObject(json);
+            address = obj.optString("address", "");
+            riskLevel = obj.optString("risk_level", "중간");
+            summary = obj.optString("summary", "");
+
+            if (riskLevel.contains("낮")) score = 85;
+            else if (riskLevel.contains("높")) score = 35;
+            else score = 62;
+
+            JSONArray clauses = obj.optJSONArray("toxic_clauses");
+            if (clauses != null) {
+                for (int i = 0; i < clauses.length(); i++) {
+                    JSONObject c = clauses.getJSONObject(i);
+                    AnalysisResultScreen.ToxicClause tc = new AnalysisResultScreen.ToxicClause(
+                            c.optString("clause"),
+                            c.optString("reason"),
+                            c.optString("severity"),
+                            c.optString("recommendation"));
+                    if (tc.isDanger()) { dangerClauses.add(tc); dangerCount++; }
+                    else { cautionClauses.add(tc); cautionCount++; }
+                }
+            }
+            parsePublicData(obj.optJSONObject("public_data"));
+        } catch (Exception ignored) { /* 파싱 실패 시 기본값 유지 */ }
+    }
+
+    private void parsePublicData(JSONObject pubData) {
+        if (pubData == null || !pubData.optBoolean("found", false)) return;
+        JSONObject bldg = pubData.optJSONObject("building");
+        if (bldg != null) {
+            buildingInfoList.add(new AnalysisResultScreen.BuildingInfo(
+                    bldg.optString("address"),
+                    bldg.optString("purpose"),
+                    bldg.optString("structure"),
+                    bldg.optInt("floors_above", 0),
+                    bldg.optString("approval_date"),
+                    bldg.optDouble("total_area", 0)));
+        }
+        JSONArray trades = pubData.optJSONArray("recent_trades");
+        if (trades != null) {
+            for (int i = 0; i < trades.length(); i++) {
+                try {
+                    JSONObject t = trades.getJSONObject(i);
+                    recentTrades.add(new AnalysisResultScreen.TradeInfo(
+                            t.optString("complex_name"),
+                            t.optString("trade_type"),
+                            t.optString("area"),
+                            t.optString("deposit"),
+                            t.optString("monthly_rent", "0"),
+                            t.optString("contract_date"),
+                            t.optString("floor")));
+                } catch (Exception ignored) { /* no-op */ }
+            }
+        }
     }
 
     private View createView() {
@@ -46,21 +123,22 @@ public class ReportSummary extends Activity {
         root.addView(progress(0.8f));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(16), dp(16), dp(12));
         scroll.addView(content);
+
         content.addView(scoreCard());
-        content.addView(clauseCard("위험 조항", "2건", DANGER, new String[][]{
-                {"임대인 일방 해지 조항", "민법 제635조 위반 가능성"},
-                {"전세금 반환 지연 면책", "주택임대차보호법 위반 소지"}
-        }));
-        content.addView(clauseCard("주의 조항", "3건", WARNING, new String[][]{
-                {"수리비 세입자 부담", "민법 제623조 확인 필요"},
-                {"묵시적 갱신 거부 특약", "갱신 거절 조건 명확화 필요"},
-                {"근저당 설정 특약", "보증금 회수 위험 가능성"}
-        }));
+        if (!dangerClauses.isEmpty()) {
+            content.addView(clauseCard("위험 조항", dangerCount + "건", DANGER,
+                    clausesToRows(dangerClauses)));
+        }
+        if (!cautionClauses.isEmpty()) {
+            content.addView(clauseCard("주의 조항", cautionCount + "건", WARNING,
+                    clausesToRows(cautionClauses)));
+        }
         content.addView(publicDataCard());
         content.addView(consultBanner());
         root.addView(scroll);
@@ -68,23 +146,38 @@ public class ReportSummary extends Activity {
         return root;
     }
 
+    private String[][] clausesToRows(List<AnalysisResultScreen.ToxicClause> clauses) {
+        String[][] rows = new String[clauses.size()][2];
+        for (int i = 0; i < clauses.size(); i++) {
+            AnalysisResultScreen.ToxicClause tc = clauses.get(i);
+            rows[i][0] = tc.clause;
+            rows[i][1] = tc.reason.isEmpty() ? tc.recommendation : tc.reason;
+        }
+        return rows;
+    }
+
     private View topBar() {
         FrameLayout bar = new FrameLayout(this);
         bar.setBackgroundColor(Color.WHITE);
-        bar.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+        bar.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
         TextView back = text("‹", TEXT, 34, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
         back.setOnClickListener(v -> finish());
-        bar.addView(back, new FrameLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START));
+        bar.addView(back, new FrameLayout.LayoutParams(
+                dp(56), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START));
         TextView title = text("종합 리포트", TEXT, 17, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
-        bar.addView(title, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        bar.addView(title, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         TextView download = text("↓", PRIMARY, 26, Typeface.BOLD);
         download.setGravity(Gravity.CENTER);
-        bar.addView(download, new FrameLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END));
+        bar.addView(download, new FrameLayout.LayoutParams(
+                dp(56), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END));
         View divider = new View(this);
         divider.setBackgroundColor(BORDER);
-        bar.addView(divider, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1), Gravity.BOTTOM));
+        bar.addView(divider, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1), Gravity.BOTTOM));
         return bar;
     }
 
@@ -94,20 +187,45 @@ public class ReportSummary extends Activity {
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(16));
         card.setElevation(dp(2));
-        card.addView(new ScoreCircle(this), new LinearLayout.LayoutParams(dp(80), dp(80)));
+        card.addView(new ScoreCircle(this, score),
+                new LinearLayout.LayoutParams(dp(80), dp(80)));
+
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         columnParams.setMargins(dp(14), 0, 0, 0);
         card.addView(column, columnParams);
-        column.addView(text("서울시 마포구 아현동 OO아파트", TEXT, 15, Typeface.BOLD));
-        column.addView(withTop(text("전세 보증금 3억 2천만원", SECONDARY, 13, Typeface.NORMAL), 4));
+
+        String cardTitle = address.isEmpty() ? "분석된 계약서" : address;
+        column.addView(text(cardTitle, TEXT, 15, Typeface.BOLD));
+
+        String riskLabel;
+        if (riskLevel.contains("낮")) riskLabel = "안전한 계약서입니다";
+        else if (riskLevel.contains("높")) riskLabel = "위험한 조항이 포함되어 있습니다";
+        else riskLabel = "일부 주의가 필요합니다";
+        column.addView(withTop(text(riskLabel, SECONDARY, 13, Typeface.NORMAL), 4));
+
         LinearLayout tags = new LinearLayout(this);
-        LinearLayout.LayoutParams tagsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams tagsParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         tagsParams.setMargins(0, dp(8), 0, 0);
         column.addView(tags, tagsParams);
-        tags.addView(pill("⚠ 주의 필요", WARNING_TINT, WARNING_TEXT, 12, 12));
-        tags.addView(withLeft(pill("위험 2건", DANGER_TINT, DANGER, 12, 12), 6));
+
+        int pillBg;
+        int pillFg;
+        String pillLabel;
+        if (riskLevel.contains("높")) {
+            pillLabel = "⚠ 위험"; pillBg = DANGER_TINT; pillFg = DANGER;
+        } else if (riskLevel.contains("낮")) {
+            pillLabel = "✔ 안전"; pillBg = SAFE_TINT; pillFg = SAFE;
+        } else {
+            pillLabel = "⚠ 주의 필요"; pillBg = WARNING_TINT; pillFg = WARNING_TEXT;
+        }
+        tags.addView(pill(pillLabel, pillBg, pillFg, 12, 12));
+        if (dangerCount > 0) {
+            tags.addView(withLeft(pill("위험 " + dangerCount + "건", DANGER_TINT, DANGER, 12, 12), 6));
+        }
         return card;
     }
 
@@ -115,22 +233,29 @@ public class ReportSummary extends Activity {
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.HORIZONTAL);
         outer.setBackground(roundRect(Color.WHITE, dp(12), 0, 0));
-        LinearLayout.LayoutParams outerParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams outerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         outerParams.setMargins(0, dp(12), 0, 0);
         outer.setLayoutParams(outerParams);
+
         View accentBar = new View(this);
         accentBar.setBackground(roundRect(accent, dp(4), 0, 0));
-        outer.addView(accentBar, new LinearLayout.LayoutParams(dp(4), ViewGroup.LayoutParams.MATCH_PARENT));
+        outer.addView(accentBar, new LinearLayout.LayoutParams(
+                dp(4), ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(16), dp(16), dp(6));
-        outer.addView(card, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        outer.addView(card, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         card.addView(header);
-        header.addView(text(title, TEXT, 16, Typeface.BOLD), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(text(title, TEXT, 16, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         header.addView(text(count, accent, 14, Typeface.BOLD));
+
         for (int i = 0; i < rows.length; i++) {
             card.addView(clauseRow(rows[i][0], rows[i][1], accent));
             if (i < rows.length - 1) card.addView(divider());
@@ -147,7 +272,8 @@ public class ReportSummary extends Activity {
         row.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(40)));
         LinearLayout center = new LinearLayout(this);
         center.setOrientation(LinearLayout.VERTICAL);
-        row.addView(center, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        row.addView(center, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         center.addView(text(title, TEXT, 14, Typeface.BOLD));
         center.addView(withTop(text(sub, SECONDARY, 12, Typeface.NORMAL), 2));
         TextView arrow = text("›", Color.rgb(158, 158, 158), 24, Typeface.NORMAL);
@@ -161,10 +287,65 @@ public class ReportSummary extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(12));
         card.addView(text("공공데이터 조회", TEXT, 16, Typeface.BOLD));
-        //card.addView(dataRow("등기부등본", "근저당 2건 확인", "위험", DANGER_TINT, DANGER));
-        card.addView(dataRow("건축물대장", "주거용 정상 등록", "안전", SAFE_TINT, SAFE));
-        card.addView(dataRow("실거래가", "시세 대비 8% 초과", "위험", DANGER_TINT, DANGER));
+        card.addView(buildingRow());
+        card.addView(tradeRow());
         return card;
+    }
+
+    private View buildingRow() {
+        if (!buildingInfoList.isEmpty()) {
+            AnalysisResultScreen.BuildingInfo b = buildingInfoList.get(0);
+            StringBuilder detail = new StringBuilder();
+            if (!b.purpose.isEmpty()) detail.append(b.purpose);
+            if (b.floorsAbove > 0) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append(b.floorsAbove).append("층");
+            }
+            if (!b.approvalDate.isEmpty()) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append(b.approvalDate).append(" 사용승인");
+            }
+            return detailDataRow("건축물대장", detail.toString(), "정상", SAFE_TINT, SAFE);
+        }
+        return dataRow("건축물대장", "조회 결과 없음", "미조회", Color.rgb(245, 245, 245), SECONDARY);
+    }
+
+    private View tradeRow() {
+        if (!recentTrades.isEmpty()) {
+            AnalysisResultScreen.TradeInfo t = recentTrades.get(0);
+            StringBuilder detail = new StringBuilder();
+            if (!t.complexName.isEmpty()) detail.append(t.complexName).append(" · ");
+            detail.append(t.tradeType).append(" 보증금 ").append(t.deposit).append("만원");
+            if (!"0".equals(t.monthlyRent) && !t.monthlyRent.isEmpty()) {
+                detail.append(" / 월세 ").append(t.monthlyRent).append("만원");
+            }
+            if (t.contractDate.length() >= 6) {
+                detail.append(" (").append(t.contractDate, 0, 4)
+                      .append("년 ").append(t.contractDate, 4, 6).append("월)");
+            }
+            return detailDataRow("실거래가", detail.toString(), "조회됨", SAFE_TINT, SAFE);
+        }
+        return dataRow("실거래가", "조회 결과 없음", "미조회", Color.rgb(245, 245, 245), SECONDARY);
+    }
+
+    private View detailDataRow(String label, String detail, String badge, int badgeBg, int badgeColor) {
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        wrapper.addView(dataRow(label, "", badge, badgeBg, badgeColor));
+
+        if (!detail.isEmpty()) {
+            TextView detailView = text(detail, SECONDARY, 12, Typeface.NORMAL);
+            detailView.setMaxLines(2);
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            p.setMargins(dp(82), 0, 0, dp(4));
+            detailView.setLayoutParams(p);
+            wrapper.addView(detailView);
+        }
+        return wrapper;
     }
 
     private View consultBanner() {
@@ -174,18 +355,27 @@ public class ReportSummary extends Activity {
         banner.setFocusable(true);
         banner.setOnClickListener(v -> startActivity(new Intent(this, ExpertComment.class)));
         banner.setBackground(roundRect(Color.rgb(232, 234, 246), dp(12), 0, 0));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(12), 0, 0);
         banner.setLayoutParams(params);
+
         View accent = new View(this);
         accent.setBackground(roundRect(PRIMARY, dp(4), 0, 0));
         banner.addView(accent, new LinearLayout.LayoutParams(dp(4), dp(72)));
+
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.setPadding(dp(12), dp(14), dp(12), dp(14));
         banner.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         texts.addView(text("전문가 상담을 권장합니다", PRIMARY, 15, Typeface.BOLD));
-        texts.addView(withTop(text("위험 조항 2건이 발견되었습니다.", Color.rgb(92, 107, 192), 13, Typeface.NORMAL), 4));
+
+        String bannerSub;
+        if (dangerCount > 0) bannerSub = "위험 조항 " + dangerCount + "건이 발견되었습니다.";
+        else if (cautionCount > 0) bannerSub = "주의 조항 " + cautionCount + "건을 확인해주세요.";
+        else bannerSub = summary.isEmpty() ? "계약서 검토가 완료되었습니다." : summary;
+        texts.addView(withTop(text(bannerSub, Color.rgb(92, 107, 192), 13, Typeface.NORMAL), 4));
+
         TextView arrow = text("›", Color.WHITE, 26, Typeface.BOLD);
         arrow.setGravity(Gravity.CENTER);
         arrow.setBackground(oval(PRIMARY));
@@ -203,14 +393,16 @@ public class ReportSummary extends Activity {
         bar.setBackgroundColor(Color.WHITE);
         bar.setElevation(dp(8));
         bar.addView(bottomButton("PDF 저장", Color.WHITE, PRIMARY, PRIMARY, 0, false));
-        bar.addView(bottomButton("카카오톡 공유", Color.rgb(254, 229, 0), Color.rgb(25, 25, 25), 0, dp(10), true));
+        bar.addView(bottomButton("카카오톡 공유", Color.rgb(254, 229, 0),
+                Color.rgb(25, 25, 25), 0, dp(10), true));
         return bar;
     }
 
     private View dataRow(String left, String center, String badge, int bg, int color) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(text(left, TEXT, 13, Typeface.BOLD), new LinearLayout.LayoutParams(dp(82), dp(44)));
+        row.addView(text(left, TEXT, 13, Typeface.BOLD),
+                new LinearLayout.LayoutParams(dp(82), dp(44)));
         TextView c = text(center, SECONDARY, 13, Typeface.NORMAL);
         c.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(c, new LinearLayout.LayoutParams(0, dp(44), 1));
@@ -222,7 +414,8 @@ public class ReportSummary extends Activity {
         LinearLayout button = new LinearLayout(this);
         button.setGravity(Gravity.CENTER);
         button.setOrientation(LinearLayout.HORIZONTAL);
-        button.setBackground(roundRect(bg, dp(12), border, border == 0 ? 0 : Math.max(1, dp(1.5f))));
+        button.setBackground(roundRect(bg, dp(12), border,
+                border == 0 ? 0 : Math.max(1, dp(1.5f))));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(52), 1);
         params.setMargins(left, 0, 0, 0);
         button.setLayoutParams(params);
@@ -241,7 +434,8 @@ public class ReportSummary extends Activity {
     private LinearLayout card(int top) {
         LinearLayout card = new LinearLayout(this);
         card.setBackground(roundRect(Color.WHITE, dp(12), 0, 0));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(top), 0, 0);
         card.setLayoutParams(params);
         return card;
@@ -250,10 +444,12 @@ public class ReportSummary extends Activity {
     private View progress(float ratio) {
         FrameLayout bar = new FrameLayout(this);
         bar.setBackgroundColor(BORDER);
-        bar.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)));
+        bar.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(4)));
         View fill = new View(this);
         fill.setBackgroundColor(PRIMARY);
-        bar.addView(fill, new FrameLayout.LayoutParams(dp(375 * ratio), ViewGroup.LayoutParams.MATCH_PARENT));
+        bar.addView(fill, new FrameLayout.LayoutParams(
+                dp(375 * ratio), ViewGroup.LayoutParams.MATCH_PARENT));
         return bar;
     }
 
@@ -275,14 +471,16 @@ public class ReportSummary extends Activity {
     }
 
     private View withTop(View v, int top) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         p.setMargins(0, dp(top), 0, 0);
         v.setLayoutParams(p);
         return v;
     }
 
     private View withLeft(View v, int left) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         p.setMargins(dp(left), 0, 0, 0);
         v.setLayoutParams(p);
         return v;
@@ -291,7 +489,8 @@ public class ReportSummary extends Activity {
     private View divider() {
         View d = new View(this);
         d.setBackgroundColor(BORDER);
-        d.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+        d.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
         return d;
     }
 
@@ -311,21 +510,25 @@ public class ReportSummary extends Activity {
     }
 
     private int dp(float value) {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
+        return (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
     }
 
     private float sp(float value) {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, getResources().getDisplayMetrics());
+        return TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP, value, getResources().getDisplayMetrics());
     }
 
     private class ScoreCircle extends View {
+        private final int score;
         private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint arc = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint arc   = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint number = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint point = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint point  = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        ScoreCircle(Activity activity) {
+        ScoreCircle(Activity activity, int score) {
             super(activity);
+            this.score = score;
             track.setStyle(Paint.Style.STROKE);
             track.setStrokeWidth(dp(8));
             track.setStrokeCap(Paint.Cap.ROUND);
@@ -333,7 +536,9 @@ public class ReportSummary extends Activity {
             arc.setStyle(Paint.Style.STROKE);
             arc.setStrokeWidth(dp(8));
             arc.setStrokeCap(Paint.Cap.ROUND);
-            arc.setColor(WARNING);
+            if (score >= 70) arc.setColor(SAFE);
+            else if (score >= 40) arc.setColor(WARNING);
+            else arc.setColor(DANGER);
             number.setTextAlign(Paint.Align.CENTER);
             number.setColor(TEXT);
             number.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
@@ -348,8 +553,8 @@ public class ReportSummary extends Activity {
             float inset = dp(6);
             RectF rect = new RectF(inset, inset, getWidth() - inset, getHeight() - inset);
             canvas.drawArc(rect, -90, 360, false, track);
-            canvas.drawArc(rect, -90, 223.2f, false, arc);
-            canvas.drawText("62", getWidth() / 2f, dp(39), number);
+            canvas.drawArc(rect, -90, score * 3.6f, false, arc);
+            canvas.drawText(String.valueOf(score), getWidth() / 2f, dp(39), number);
             canvas.drawText("점", getWidth() / 2f, dp(57), point);
         }
     }

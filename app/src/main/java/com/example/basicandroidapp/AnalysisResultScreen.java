@@ -23,7 +23,15 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class AnalysisResultScreen extends Activity {
+    static final String EXTRA_ANALYSIS_RESULT = "analysis_result";
+
     private static final int BACKGROUND = Color.rgb(248, 249, 250);
     private static final int PRIMARY = Color.rgb(63, 81, 181);
     private static final int TEXT = Color.rgb(33, 33, 33);
@@ -37,40 +45,149 @@ public class AnalysisResultScreen extends Activity {
     private static final int SAFE = Color.rgb(76, 175, 80);
     private static final int SAFE_TINT = Color.rgb(232, 245, 233);
 
-    private String contractText;
+    // API 응답 파싱 결과
+    private String riskLevel = "알 수 없음";
+    private String summary = "";
+    private String analysisDate = "";
+    private int score = 62;
+    private int dangerCount = 0;
+    private int cautionCount = 0;
+    private int safeCount = 0;
+    private List<ToxicClause> toxicClauses = new ArrayList<>();
+    private final List<BuildingInfo> buildingInfoList = new ArrayList<>(); // 최대 1개
+    private final List<TradeInfo> recentTrades = new ArrayList<>();
+
+    // bottomSheet 동적 업데이트용 뷰 참조
+    private TextView bottomSheetSeverityPill;
+    private TextView bottomSheetClauseTitle;
+    private TextView bottomSheetClauseBody;
+
+    static class ToxicClause {
+        final String clause;
+        final String reason;
+        final String severity;
+        final String recommendation;
+
+        ToxicClause(String clause, String reason, String severity, String recommendation) {
+            this.clause = clause;
+            this.reason = reason;
+            this.severity = severity;
+            this.recommendation = recommendation;
+        }
+
+        boolean isDanger() { return severity.contains("높") || severity.equalsIgnoreCase("danger"); }
+        boolean isCaution() { return severity.contains("중") || severity.equalsIgnoreCase("caution"); }
+    }
+
+    static class BuildingInfo {
+        final String address;
+        final String purpose;
+        final String structure;
+        final String approvalDate;
+        final int floorsAbove;
+        final double totalArea;
+
+        BuildingInfo(String address, String purpose, String structure,
+                     int floorsAbove, String approvalDate, double totalArea) {
+            this.address = address;
+            this.purpose = purpose;
+            this.structure = structure;
+            this.floorsAbove = floorsAbove;
+            this.approvalDate = approvalDate;
+            this.totalArea = totalArea;
+        }
+    }
+
+    static class TradeInfo {
+        final String complexName;
+        final String tradeType;
+        final String area;
+        final String deposit;
+        final String monthlyRent;
+        final String contractDate;
+        final String floor;
+
+        TradeInfo(String complexName, String tradeType, String area, String deposit,
+                  String monthlyRent, String contractDate, String floor) {
+            this.complexName = complexName;
+            this.tradeType = tradeType;
+            this.area = area;
+            this.deposit = deposit;
+            this.monthlyRent = monthlyRent;
+            this.contractDate = contractDate;
+            this.floor = floor;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        contractText = getIntent().getStringExtra(ApiContract.EXTRA_CONTRACT_TEXT);
+        parseAnalysisResult(getIntent().getStringExtra(EXTRA_ANALYSIS_RESULT));
         setContentView(createView());
     }
 
-    /*private View createView() {
-        FrameLayout frame = new FrameLayout(this);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BACKGROUND);
-        frame.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    private void parseAnalysisResult(String json) {
+        if (json == null || json.isEmpty()) return;
+        try {
+            JSONObject obj = new JSONObject(json);
+            riskLevel = obj.optString("risk_level", "알 수 없음");
+            summary = obj.optString("summary", "");
+            analysisDate = obj.optString("created_at", "");
+            if (analysisDate.length() > 10) analysisDate = analysisDate.substring(0, 10);
 
-        root.addView(topBar());
-        root.addView(progress(0.6f));
+            // 위험도에 따라 점수 산정
+            if (riskLevel.contains("낮")) score = 85;
+            else if (riskLevel.contains("높")) score = 35;
+            else score = 62;
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(16), dp(16), dp(12));
-        scroll.addView(content);
-        content.addView(scoreCard());
-        content.addView(highlightCard());
-        content.addView(publicDataCard());
-        root.addView(scroll);
-        root.addView(bottomBar());
+            JSONArray clauses = obj.optJSONArray("toxic_clauses");
+            if (clauses != null) {
+                for (int i = 0; i < clauses.length(); i++) {
+                    JSONObject c = clauses.getJSONObject(i);
+                    ToxicClause tc = new ToxicClause(
+                            c.optString("clause"),
+                            c.optString("reason"),
+                            c.optString("severity"),
+                            c.optString("recommendation"));
+                    toxicClauses.add(tc);
+                    if (tc.isDanger()) dangerCount++;
+                    else if (tc.isCaution()) cautionCount++;
+                    else safeCount++;
+                }
+            }
+            parsePublicData(obj.optJSONObject("public_data"));
+        } catch (Exception ignored) { /* 파싱 실패 시 기본값 유지 */ }
+    }
 
-        frame.addView(bottomSheet(), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        return frame;
-    }*/
+    private void parsePublicData(JSONObject pubData) {
+        if (pubData == null || !pubData.optBoolean("found", false)) return;
+        JSONObject bldg = pubData.optJSONObject("building");
+        if (bldg != null) {
+            buildingInfoList.add(new BuildingInfo(
+                    bldg.optString("address"),
+                    bldg.optString("purpose"),
+                    bldg.optString("structure"),
+                    bldg.optInt("floors_above", 0),
+                    bldg.optString("approval_date"),
+                    bldg.optDouble("total_area", 0)));
+        }
+        JSONArray trades = pubData.optJSONArray("recent_trades");
+        if (trades != null) {
+            for (int i = 0; i < trades.length(); i++) {
+                try {
+                    JSONObject t = trades.getJSONObject(i);
+                    recentTrades.add(new TradeInfo(
+                            t.optString("complex_name"),
+                            t.optString("trade_type"),
+                            t.optString("area"),
+                            t.optString("deposit"),
+                            t.optString("monthly_rent", "0"),
+                            t.optString("contract_date"),
+                            t.optString("floor")));
+                } catch (Exception ignored) { /* no-op */ }
+            }
+        }
+    }
 
     private View createView() {
         FrameLayout frame = new FrameLayout(this);
@@ -135,17 +252,11 @@ public class AnalysisResultScreen extends Activity {
         // ✅ 3. 드래그 다운 시 닫기
         final float[] startY = {0};
         sheet.setOnTouchListener((v, event) -> {
-            switch (event.getAction()) {
-                case android.view.MotionEvent.ACTION_DOWN:
-                    startY[0] = event.getRawY();
-                    break;
-                case android.view.MotionEvent.ACTION_UP:
-                    float endY = event.getRawY();
-                    if (endY - startY[0] > dp(80)) {
-                        // 80dp 이상 아래로 드래그하면 닫힘
-                        overlay.setVisibility(View.GONE);
-                    }
-                    break;
+            int action = event.getAction();
+            if (action == android.view.MotionEvent.ACTION_DOWN) {
+                startY[0] = event.getRawY();
+            } else if (action == android.view.MotionEvent.ACTION_UP && event.getRawY() - startY[0] > dp(80)) {
+                overlay.setVisibility(View.GONE);
             }
             return false;
         });
@@ -156,14 +267,18 @@ public class AnalysisResultScreen extends Activity {
         LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(36), dp(4));
         handleParams.gravity = Gravity.CENTER_HORIZONTAL;
         sheet.addView(handle, handleParams);
-        sheet.addView(withTop(pill("⚠ 주의 조항", Color.rgb(255, 248, 225), WARNING_TEXT, 12), 16));
-        sheet.addView(withTop(text("수리비 일체는 임차인이 부담한다", TEXT, 17, Typeface.BOLD), 10));
-        TextView body = text(
-                "임차인이 모든 수리비를 부담하도록 하는 조항은\n민법 제623조(임대인의 수선의무)에 위반될 수 있습니다.",
-                SECONDARY, 14, Typeface.NORMAL
-        );
-        body.setLineSpacing(dp(7), 1.0f);
-        sheet.addView(withTop(body, 8));
+        bottomSheetSeverityPill = text("⚠ 주의 조항", WARNING_TEXT, 12, Typeface.BOLD);
+        bottomSheetSeverityPill.setGravity(Gravity.CENTER);
+        bottomSheetSeverityPill.setPadding(dp(12), dp(4), dp(12), dp(4));
+        bottomSheetSeverityPill.setBackground(roundRect(Color.rgb(255, 248, 225), dp(12), 0, 0));
+        sheet.addView(withTop(bottomSheetSeverityPill, 16));
+
+        bottomSheetClauseTitle = text("", TEXT, 17, Typeface.BOLD);
+        sheet.addView(withTop(bottomSheetClauseTitle, 10));
+
+        bottomSheetClauseBody = text("", SECONDARY, 14, Typeface.NORMAL);
+        bottomSheetClauseBody.setLineSpacing(dp(7), 1.0f);
+        sheet.addView(withTop(bottomSheetClauseBody, 8));
         View divider = new View(this);
         divider.setBackgroundColor(BORDER);
         LinearLayout.LayoutParams d = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
@@ -176,6 +291,25 @@ public class AnalysisResultScreen extends Activity {
         buttons.addView(button("안전 수정안 보기", PRIMARY, Color.WHITE, 0, dp(10)));
 
         return overlay;
+    }
+
+    private void showClauseBottomSheet(ToxicClause tc, View overlay) {
+        if (tc.isDanger()) {
+            bottomSheetSeverityPill.setText("⚠ 위험 조항");
+            bottomSheetSeverityPill.setTextColor(DANGER);
+            bottomSheetSeverityPill.setBackground(roundRect(DANGER_TINT, dp(12), 0, 0));
+        } else if (tc.isCaution()) {
+            bottomSheetSeverityPill.setText("⚠ 주의 조항");
+            bottomSheetSeverityPill.setTextColor(WARNING_TEXT);
+            bottomSheetSeverityPill.setBackground(roundRect(Color.rgb(255, 248, 225), dp(12), 0, 0));
+        } else {
+            bottomSheetSeverityPill.setText("✔ 안전 조항");
+            bottomSheetSeverityPill.setTextColor(SAFE);
+            bottomSheetSeverityPill.setBackground(roundRect(SAFE_TINT, dp(12), 0, 0));
+        }
+        bottomSheetClauseTitle.setText(tc.clause);
+        bottomSheetClauseBody.setText(tc.reason.isEmpty() ? tc.recommendation : tc.reason);
+        overlay.setVisibility(View.VISIBLE);
     }
 
     private View topBar() {
@@ -191,7 +325,11 @@ public class AnalysisResultScreen extends Activity {
         bar.addView(title, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         TextView share = text("↗", PRIMARY, 24, Typeface.BOLD);
         share.setGravity(Gravity.CENTER);
-        share.setOnClickListener(v -> startActivity(new Intent(this, ReportSummary.class)));
+        share.setOnClickListener(v -> {
+            Intent intent = new Intent(this, ReportSummary.class);
+            intent.putExtra(EXTRA_ANALYSIS_RESULT, getIntent().getStringExtra(EXTRA_ANALYSIS_RESULT));
+            startActivity(intent);
+        });
         bar.addView(share, new FrameLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END));
         View divider = new View(this);
         divider.setBackgroundColor(BORDER);
@@ -209,7 +347,8 @@ public class AnalysisResultScreen extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         card.addView(header);
         header.addView(text("종합 안전 점수", TEXT, 16, Typeface.BOLD), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        header.addView(text("2024.01.15 분석", Color.rgb(158, 158, 158), 12, Typeface.NORMAL));
+        String dateLabel = analysisDate.isEmpty() ? "분석 완료" : analysisDate + " 분석";
+        header.addView(text(dateLabel, Color.rgb(158, 158, 158), 12, Typeface.NORMAL));
 
         LinearLayout body = new LinearLayout(this);
         body.setGravity(Gravity.CENTER_VERTICAL);
@@ -221,113 +360,109 @@ public class AnalysisResultScreen extends Activity {
         left.setOrientation(LinearLayout.VERTICAL);
         left.setGravity(Gravity.CENTER_HORIZONTAL);
         body.addView(left, new LinearLayout.LayoutParams(dp(136), ViewGroup.LayoutParams.WRAP_CONTENT));
-        left.addView(new ScoreGauge(this, 120, 36, 14), new LinearLayout.LayoutParams(dp(120), dp(120)));
-        left.addView(pill("⚠ 주의 필요", Color.rgb(255, 248, 225), WARNING_TEXT, 12));
+        left.addView(new ScoreGauge(this, score, 120, 36, 14), new LinearLayout.LayoutParams(dp(120), dp(120)));
+        boolean isDanger = riskLevel.contains("높");
+        boolean isSafe = riskLevel.contains("낮");
+        String pillLabel;
+        int pillBg;
+        int pillFg;
+        if (isDanger) {
+            pillLabel = "⚠ 위험"; pillBg = DANGER_TINT; pillFg = DANGER;
+        } else if (isSafe) {
+            pillLabel = "✔ 안전"; pillBg = SAFE_TINT; pillFg = SAFE;
+        } else {
+            pillLabel = "⚠ 주의 필요"; pillBg = Color.rgb(255, 248, 225); pillFg = WARNING_TEXT;
+        }
+        left.addView(pill(pillLabel, pillBg, pillFg, 12));
 
         LinearLayout counts = new LinearLayout(this);
         counts.setOrientation(LinearLayout.VERTICAL);
         body.addView(counts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        counts.addView(riskRow(DANGER, "위험", "2건"));
-        counts.addView(riskRow(WARNING, "주의", "3건"));
-        counts.addView(riskRow(SAFE, "안전", "5건"));
+        counts.addView(riskRow(DANGER, "위험", dangerCount + "건"));
+        counts.addView(riskRow(WARNING, "주의", cautionCount + "건"));
+        counts.addView(riskRow(SAFE, "안전", safeCount + "건"));
         return card;
     }
-
-    /*private View highlightCard() {
-        LinearLayout card = card(12);
-        card.setPadding(dp(16), dp(16), dp(16), dp(12));
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setElevation(dp(2));
-
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(header);
-        header.addView(text("원문 분석", TEXT, 16, Typeface.BOLD), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        header.addView(text("전체보기", PRIMARY, 13, Typeface.NORMAL));
-
-        TextView body = text("", TEXT, 14, Typeface.NORMAL);
-        body.setLineSpacing(dp(9), 1.0f);
-        body.setText(highlightedText());
-        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(200));
-        bodyParams.setMargins(0, dp(12), 0, 0);
-        card.addView(body, bodyParams);
-
-        View divider = new View(this);
-        divider.setBackgroundColor(BORDER);
-        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
-        dividerParams.setMargins(0, dp(12), 0, dp(12));
-        card.addView(divider, dividerParams);
-
-        TextView detail = text("위험 조항 2개 상세 보기  ›", PRIMARY, 13, Typeface.BOLD);
-        card.addView(detail);
-        return card;
-    }*/
 
     private View highlightCard(View popupOverlay) {
         LinearLayout card = card(12);
         card.setPadding(dp(16), dp(16), dp(16), dp(12));
         card.setOrientation(LinearLayout.VERTICAL);
         card.setElevation(dp(2));
-
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(header);
-        header.addView(
-                text("원문 분석", TEXT, 16, Typeface.BOLD),
-                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1)
-        );
-        header.addView(text("전체보기", PRIMARY, 13, Typeface.NORMAL));
-
-        TextView body = text("", TEXT, 14, Typeface.NORMAL);
-        body.setLineSpacing(dp(9), 1.0f);
-        body.setText(highlightedText());
-        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(200)
-        );
-        bodyParams.setMargins(0, dp(12), 0, 0);
-        card.addView(body, bodyParams);
-
-        // ✅ 하이라이트 텍스트 클릭 시 팝업 열기
-        body.setOnClickListener(v -> popupOverlay.setVisibility(View.VISIBLE));
-
-        View divider = new View(this);
-        divider.setBackgroundColor(BORDER);
-        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)
-        );
-        dividerParams.setMargins(0, dp(12), 0, dp(12));
-        card.addView(divider, dividerParams);
-
-        // ✅ "위험 조항 2개 상세 보기" 클릭 시에도 팝업 열기
-        TextView detail = text("위험 조항 2개 상세 보기  ›", PRIMARY, 13, Typeface.BOLD);
-        detail.setOnClickListener(v -> popupOverlay.setVisibility(View.VISIBLE));
-        card.addView(detail);
+        card.addView(clauseCardHeader());
+        addClauseRows(card, popupOverlay);
         return card;
     }
 
-    private SpannableString highlightedText() {
-        String fallbackText = "계약 기간은 2년으로 한다 [안전]\n\n"
-                + "임대인은 별도 통보 없이 계약을 해지할 수 있다 [위험]\n\n"
-                + "수리비 일체는 임차인이 부담한다 [주의]\n\n"
-                + "전세금 반환이 지연되는 경우 임대인은 책임을 면할 수 있다.";
-        String value = contractText == null || contractText.trim().isEmpty() ? fallbackText : contractText;
-        SpannableString span = new SpannableString(value);
-        mark(span, value, "계약 기간은 2년으로 한다", SAFE_TINT, SAFE);
-        mark(span, value, "[안전]", SAFE_TINT, SAFE);
-        mark(span, value, "임대인은 별도 통보 없이 계약을 해지할 수 있다", DANGER_TINT, DANGER);
-        mark(span, value, "[위험]", DANGER_TINT, DANGER);
-        mark(span, value, "수리비 일체는 임차인이 부담한다", WARNING_TINT, WARNING_TEXT);
-        mark(span, value, "[주의]", WARNING_TINT, WARNING_TEXT);
-        return span;
+    private View clauseCardHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(text("독소조항 목록", TEXT, 16, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        int total = dangerCount + cautionCount;
+        int countColor = total > 0 ? DANGER : SAFE;
+        header.addView(text(total + "건 발견", countColor, 13, Typeface.BOLD));
+        return header;
     }
 
-    private void mark(SpannableString span, String source, String target, int bg, int fg) {
-        int start = source.indexOf(target);
-        if (start >= 0) {
-            span.setSpan(new BackgroundColorSpan(bg), start, start + target.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            span.setSpan(new ForegroundColorSpan(fg), start, start + target.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            span.setSpan(new StyleSpan(Typeface.BOLD), start, start + target.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    private void addClauseRows(LinearLayout card, View popupOverlay) {
+        if (toxicClauses.isEmpty()) {
+            String msg = summary.isEmpty() ? "독소조항이 발견되지 않았습니다." : summary;
+            TextView empty = text(msg, SECONDARY, 14, Typeface.NORMAL);
+            LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            ep.setMargins(0, dp(12), 0, 0);
+            empty.setLineSpacing(dp(6), 1f);
+            card.addView(empty, ep);
+            return;
         }
+        for (int i = 0; i < Math.min(toxicClauses.size(), 3); i++) {
+            card.addView(clauseRow(toxicClauses.get(i), popupOverlay));
+        }
+        if (toxicClauses.size() > 3) {
+            TextView more = text("+ " + (toxicClauses.size() - 3) + "건 더 보기  ›", PRIMARY, 13, Typeface.BOLD);
+            LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            mp.setMargins(0, dp(10), 0, 0);
+            more.setLayoutParams(mp);
+            more.setOnClickListener(v -> showClauseBottomSheet(toxicClauses.get(3), popupOverlay));
+            card.addView(more);
+        }
+    }
+
+    private View clauseRow(ToxicClause tc, View popupOverlay) {
+        int bg;
+        int fg;
+        if (tc.isDanger()) { bg = DANGER_TINT; fg = DANGER; }
+        else if (tc.isCaution()) { bg = WARNING_TINT; fg = WARNING_TEXT; }
+        else { bg = SAFE_TINT; fg = SAFE; }
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setBackground(roundRect(bg, dp(8), 0, 0));
+        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> showClauseBottomSheet(tc, popupOverlay));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, 0);
+        row.setLayoutParams(params);
+
+        TextView clauseText = text(tc.clause, fg, 13, Typeface.BOLD);
+        clauseText.setMaxLines(2);
+        row.addView(clauseText);
+
+        if (!tc.reason.isEmpty()) {
+            TextView reasonText = text(tc.reason, TEXT, 12, Typeface.NORMAL);
+            reasonText.setMaxLines(2);
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rp.setMargins(0, dp(4), 0, 0);
+            reasonText.setLayoutParams(rp);
+            row.addView(reasonText);
+        }
+        return row;
     }
 
     private View publicDataCard() {
@@ -336,44 +471,76 @@ public class AnalysisResultScreen extends Activity {
         card.setPadding(dp(16), dp(16), dp(16), dp(16));
         card.setElevation(dp(2));
         card.addView(text("공공데이터 조회 결과", TEXT, 16, Typeface.BOLD));
-        //card.addView(statusRow("▣", "등기부등본", "근저당 있음", DANGER_TINT, DANGER));
-        card.addView(statusRow("⌂", "건축물대장", "정상", SAFE_TINT, SAFE));
-        card.addView(statusRow("₩", "실거래가", "시세 대비 높음", DANGER_TINT, DANGER));
+        card.addView(buildingRow());
+        card.addView(tradeRow());
         return card;
     }
 
-   /* private View bottomSheet() {
-        FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(Color.argb(64, 0, 0, 0));
-        LinearLayout sheet = new LinearLayout(this);
-        sheet.setOrientation(LinearLayout.VERTICAL);
-        sheet.setPadding(dp(20), dp(12), dp(20), dp(20));
-        sheet.setBackground(topRound(Color.WHITE, dp(20)));
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
-        overlay.addView(sheet, params);
+    private View buildingRow() {
+        if (!buildingInfoList.isEmpty()) {
+            BuildingInfo b = buildingInfoList.get(0);
+            StringBuilder detail = new StringBuilder();
+            if (!b.purpose.isEmpty()) detail.append(b.purpose);
+            if (b.floorsAbove > 0) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append(b.floorsAbove).append("층");
+            }
+            if (!b.approvalDate.isEmpty()) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append(b.approvalDate).append(" 사용승인");
+            }
+            return detailStatusRow("⌂", "건축물대장", "정상", detail.toString(), SAFE_TINT, SAFE);
+        }
+        return statusRow("⌂", "건축물대장", "미조회", Color.rgb(245, 245, 245), SECONDARY);
+    }
 
-        View handle = new View(this);
-        handle.setBackground(roundRect(BORDER, dp(2), 0, 0));
-        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(36), dp(4));
-        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
-        sheet.addView(handle, handleParams);
-        sheet.addView(withTop(pill("⚠ 주의 조항", Color.rgb(255, 248, 225), WARNING_TEXT, 12), 16));
-        sheet.addView(withTop(text("수리비 일체는 임차인이 부담한다", TEXT, 17, Typeface.BOLD), 10));
-        TextView body = text("임차인이 모든 수리비를 부담하도록 하는 조항은\n민법 제623조(임대인의 수선의무)에 위반될 수 있습니다.", SECONDARY, 14, Typeface.NORMAL);
-        body.setLineSpacing(dp(7), 1.0f);
-        sheet.addView(withTop(body, 8));
-        View divider = new View(this);
-        divider.setBackgroundColor(BORDER);
-        LinearLayout.LayoutParams d = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
-        d.setMargins(0, dp(16), 0, dp(16));
-        sheet.addView(divider, d);
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        sheet.addView(buttons);
-        buttons.addView(button("법적 근거 보기", Color.WHITE, PRIMARY, PRIMARY, 0));
-        buttons.addView(button("안전 수정안 보기", PRIMARY, Color.WHITE, 0, dp(10)));
-        return overlay;
-    }*/
+    private View tradeRow() {
+        if (!recentTrades.isEmpty()) {
+            TradeInfo t = recentTrades.get(0);
+            StringBuilder detail = new StringBuilder();
+            if (!t.complexName.isEmpty()) detail.append(t.complexName).append(" · ");
+            detail.append(t.tradeType).append(" 보증금 ").append(t.deposit).append("만원");
+            if (!"0".equals(t.monthlyRent) && !t.monthlyRent.isEmpty()) {
+                detail.append(" / 월세 ").append(t.monthlyRent).append("만원");
+            }
+            if (t.contractDate.length() >= 6) {
+                detail.append(" (").append(t.contractDate, 0, 4)
+                      .append("년 ").append(t.contractDate, 4, 6).append("월)");
+            }
+            return detailStatusRow("₩", "실거래가", "조회됨", detail.toString(), SAFE_TINT, SAFE);
+        }
+        return statusRow("₩", "실거래가", "미조회", Color.rgb(245, 245, 245), SECONDARY);
+    }
+
+    private View detailStatusRow(String icon, String label, String badge, String detail,
+                                 int badgeBg, int badgeColor) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, 0);
+        row.setLayoutParams(params);
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(text(icon, PRIMARY, 18, Typeface.BOLD),
+                new LinearLayout.LayoutParams(dp(30), ViewGroup.LayoutParams.WRAP_CONTENT));
+        top.addView(text(label, TEXT, 14, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        top.addView(pill(badge, badgeBg, badgeColor, 12));
+        row.addView(top);
+
+        if (!detail.isEmpty()) {
+            TextView detailView = text(detail, SECONDARY, 12, Typeface.NORMAL);
+            detailView.setMaxLines(2);
+            LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            subParams.setMargins(dp(30), dp(2), 0, dp(4));
+            detailView.setLayoutParams(subParams);
+            row.addView(detailView);
+        }
+        return row;
+    }
 
     private View bottomBar() {
         LinearLayout bar = new LinearLayout(this);
@@ -383,7 +550,11 @@ public class AnalysisResultScreen extends Activity {
         TextView button = text("공유하기", Color.WHITE, 16, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
         button.setBackground(roundRect(PRIMARY, dp(12), 0, 0));
-        button.setOnClickListener(v -> startActivity(new Intent(this, ReportSummary.class)));
+        button.setOnClickListener(v -> {
+            Intent intent = new Intent(this, ReportSummary.class);
+            intent.putExtra(EXTRA_ANALYSIS_RESULT, getIntent().getStringExtra(EXTRA_ANALYSIS_RESULT));
+            startActivity(intent);
+        });
         bar.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
         return bar;
     }
@@ -490,6 +661,7 @@ public class AnalysisResultScreen extends Activity {
     }
 
     private class ScoreGauge extends View {
+        private final int score;
         private final int size;
         private final int numberSize;
         private final int pointSize;
@@ -498,8 +670,9 @@ public class AnalysisResultScreen extends Activity {
         private final Paint number = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint point = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        ScoreGauge(Activity activity, int size, int numberSize, int pointSize) {
+        ScoreGauge(Activity activity, int score, int size, int numberSize, int pointSize) {
             super(activity);
+            this.score = score;
             this.size = size;
             this.numberSize = numberSize;
             this.pointSize = pointSize;
@@ -510,7 +683,9 @@ public class AnalysisResultScreen extends Activity {
             arc.setStyle(Paint.Style.STROKE);
             arc.setStrokeWidth(dp(10));
             arc.setStrokeCap(Paint.Cap.ROUND);
-            arc.setColor(WARNING);
+            if (score >= 70) arc.setColor(SAFE);
+            else if (score >= 40) arc.setColor(WARNING);
+            else arc.setColor(DANGER);
             number.setTextAlign(Paint.Align.CENTER);
             number.setColor(TEXT);
             number.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
@@ -525,8 +700,8 @@ public class AnalysisResultScreen extends Activity {
             float inset = dp(8);
             RectF rect = new RectF(inset, inset, getWidth() - inset, getHeight() - inset);
             canvas.drawArc(rect, -90, 360, false, track);
-            canvas.drawArc(rect, -90, 223.2f, false, arc);
-            canvas.drawText("62", getWidth() / 2f, dp(size / 2f + numberSize / 3f), number);
+            canvas.drawArc(rect, -90, score * 3.6f, false, arc);
+            canvas.drawText(String.valueOf(score), getWidth() / 2f, dp(size / 2f + numberSize / 3f), number);
             canvas.drawText("점", getWidth() / 2f, dp(size / 2f + 29), point);
         }
     }
