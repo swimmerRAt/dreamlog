@@ -28,6 +28,7 @@ class AnalysisResponse(BaseModel):
     id: int
     address: str
     risk_level: str
+    risk_score: int  # 0~100 점수
     summary: str
     toxic_clauses: List[ToxicClause]
     original_text: str
@@ -190,10 +191,21 @@ def get_analysis(
 def _build_response(analysis: Analysis) -> dict:
     toxic_clauses = json.loads(analysis.toxic_clauses) if analysis.toxic_clauses else []
     public_data = lookup_public_data(analysis.address or "")
+    
+    # risk_level에 따라 risk_score 계산
+    risk_level = analysis.risk_level
+    if "높" in risk_level:  # 높음
+        risk_score = 35
+    elif "낮" in risk_level:  # 낮음
+        risk_score = 85
+    else:  # 중간 또는 기타
+        risk_score = 62
+    
     return {
         "id": analysis.id,
         "address": analysis.address or "",
         "risk_level": analysis.risk_level,
+        "risk_score": risk_score,
         "summary": analysis.summary,
         "toxic_clauses": toxic_clauses,
         "original_text": analysis.original_text,
