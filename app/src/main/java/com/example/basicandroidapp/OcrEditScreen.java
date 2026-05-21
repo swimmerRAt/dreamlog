@@ -31,9 +31,11 @@ import androidx.core.content.FileProvider;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -80,7 +82,11 @@ public class OcrEditScreen extends Activity {
     private static final int INDIGO_TINT = Color.rgb(232, 234, 246);
     private static final int COUNT_TEXT = Color.rgb(158, 158, 158);
 
-    private final OkHttpClient httpClient = new OkHttpClient();
+    private final OkHttpClient httpClient = new OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .build();
 
     private EditText contractTextInput;
     private TextView countText;
@@ -115,6 +121,7 @@ public class OcrEditScreen extends Activity {
 
             Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             intent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivityForResult(intent, REQUEST_CAMERA);
         } catch (Exception e) {
             Toast.makeText(this, "카메라를 실행할 수 없습니다.", Toast.LENGTH_SHORT).show();
@@ -169,7 +176,7 @@ public class OcrEditScreen extends Activity {
                     runOnUiThread(() -> showError("이미지를 읽을 수 없습니다."));
                     return;
                 }
-                byte[] imageBytes = inputStream.readAllBytes();
+                byte[] imageBytes = toBytes(inputStream);
 
                 String mimeType = getContentResolver().getType(imageUri);
                 if (mimeType == null) mimeType = "image/jpeg";
@@ -208,6 +215,14 @@ public class OcrEditScreen extends Activity {
                 runOnUiThread(() -> showError("오류가 발생했습니다."));
             }
         }).start();
+    }
+
+    private static byte[] toBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int n;
+        while ((n = in.read(chunk)) != -1) buf.write(chunk, 0, n);
+        return buf.toByteArray();
     }
 
     private void analyzeText() {
