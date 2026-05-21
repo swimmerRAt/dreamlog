@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+import traceback
 
 from llm_core import analyze_contract, extract_contract_address, get_client
 
@@ -33,9 +34,27 @@ async def analyze(
     }
     """
     client = get_client()
-    result, address = await asyncio.gather(
+    
+    # return_exceptions=True를 사용해서 예외를 반환값으로 받음
+    results = await asyncio.gather(
         analyze_contract(contract_text, client=client, include_scripts=include_scripts),
         extract_contract_address(contract_text, client=client),
+        return_exceptions=True
     )
+    
+    result = results[0]
+    address = results[1]
+    
+    # 예외를 확인하고 명확한 에러 메시지 생성
+    if isinstance(result, Exception):
+        tb_str = traceback.format_exception(type(result), result, result.__traceback__)
+        print(f"[ERROR] analyze_contract failed:\n{''.join(tb_str)}", flush=True)
+        raise result
+    
+    if isinstance(address, Exception):
+        tb_str = traceback.format_exception(type(address), address, address.__traceback__)
+        print(f"[ERROR] extract_contract_address failed:\n{''.join(tb_str)}", flush=True)
+        raise address
+    
     result["address"] = address
     return result

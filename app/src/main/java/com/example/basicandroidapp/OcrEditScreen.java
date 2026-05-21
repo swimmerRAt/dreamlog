@@ -2,6 +2,7 @@ package com.example.basicandroidapp;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -35,6 +36,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
@@ -62,6 +65,8 @@ public class OcrEditScreen extends Activity {
                     + "수리비 일체는 임차인이 부담한다.";
 
     private static final MediaType JSON_TYPE = MediaType.get("application/json; charset=utf-8");
+    private static final String HEADER_AUTH = "Authorization";
+    private static final String BEARER_PREFIX = "Bearer ";
 
     private static final int REQUEST_CAMERA = 2001;
     private static final int REQUEST_GALLERY = 2002;
@@ -80,7 +85,7 @@ public class OcrEditScreen extends Activity {
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(300, TimeUnit.SECONDS)  // OCR 및 분석이 오래 걸릴 수 있으니 5분으로 설정
             .writeTimeout(60, TimeUnit.SECONDS)
             .build();
 
@@ -129,6 +134,7 @@ public class OcrEditScreen extends Activity {
     private void launchGallery() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("image/*");
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         startActivityForResult(intent, REQUEST_GALLERY);
     }
 
@@ -149,15 +155,19 @@ public class OcrEditScreen extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK) return;
 
-        Uri imageUri = null;
         if (requestCode == REQUEST_CAMERA) {
-            imageUri = cameraImageUri;
+            if (cameraImageUri != null) uploadImageForOcr(cameraImageUri);
         } else if (requestCode == REQUEST_GALLERY && data != null) {
-            imageUri = data.getData();
-        }
-
-        if (imageUri != null) {
-            uploadImageForOcr(imageUri);
+            List<Uri> uris = new ArrayList<>();
+            ClipData clip = data.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount(); i++) {
+                    uris.add(clip.getItemAt(i).getUri());
+                }
+            } else if (data.getData() != null) {
+                uris.add(data.getData());
+            }
+            if (!uris.isEmpty()) uploadImagesForOcr(uris);
         }
     }
 
@@ -188,7 +198,7 @@ public class OcrEditScreen extends Activity {
                 String token = getToken();
                 Request request = new Request.Builder()
                         .url(ApiContract.BASE_URL + "/contract/analyze")
-                        .addHeader("Authorization", "Bearer " + token)
+                        .addHeader(HEADER_AUTH, BEARER_PREFIX + token)
                         .post(requestBody)
                         .build();
 
@@ -214,6 +224,61 @@ public class OcrEditScreen extends Activity {
             } catch (Exception e) {
                 runOnUiThread(() -> showError("오류가 발생했습니다."));
             }
+        }).start();
+    }
+
+    private void uploadImagesForOcr(List<Uri> uris) {
+        showLoading(true);
+        contractTextInput.setText("이미지 처리 중... (0/" + uris.size() + ")");
+        contractTextInput.setEnabled(false);
+        cachedOcrText = null;
+        cachedAnalysisJson = null;
+
+        new Thread(() -> {
+            StringBuilder combined = new StringBuilder();
+            int total = uris.size();
+            for (int i = 0; i < total; i++) {
+                final int page = i + 1;
+                runOnUiThread(() -> contractTextInput.setText(page + "/" + total + " 페이지 OCR 처리 중..."));
+                try (InputStream inputStream = getContentResolver().openInputStream(uris.get(i))) {
+                    if (inputStream == null) continue;
+                    byte[] imageBytes = toBytes(inputStream);
+                    String mimeType = getContentResolver().getType(uris.get(i));
+                    if (mimeType == null) mimeType = "image/jpeg";
+
+                    RequestBody fileBody = RequestBody.create(imageBytes, MediaType.parse(mimeType));
+                    RequestBody requestBody = new MultipartBody.Builder()
+                            .setType(MultipartBody.FORM)
+                            .addFormDataPart("file", "contract.jpg", fileBody)
+                            .build();
+                    Request request = new Request.Builder()
+                            .url(ApiContract.BASE_URL + "/contract/ocr")
+                            .addHeader(HEADER_AUTH, BEARER_PREFIX + getToken())
+                            .post(requestBody)
+                            .build();
+                    try (Response response = httpClient.newCall(request).execute()) {
+                        String body = response.body() != null ? response.body().string() : "";
+                        if (response.isSuccessful()) {
+                            String pageText = new JSONObject(body).optString("text", "");
+                            if (combined.length() > 0) {
+                                combined.append("\n\n=== ").append(page).append("페이지 ===\n\n");
+                            }
+                            combined.append(pageText);
+                        }
+                    }
+                } catch (IOException | org.json.JSONException ignored) { /* 해당 페이지 건너뜀 */ }
+            }
+            String finalText = combined.toString();
+            runOnUiThread(() -> {
+                showLoading(false);
+                contractTextInput.setEnabled(true);
+                if (finalText.isEmpty()) {
+                    showError("OCR 처리에 실패했습니다.");
+                } else {
+                    contractTextInput.setText(finalText);
+                    contractTextInput.setSelection(finalText.length());
+                }
+            });
         }).start();
     }
 
@@ -250,7 +315,7 @@ public class OcrEditScreen extends Activity {
                 String token = getToken();
                 Request request = new Request.Builder()
                         .url(ApiContract.BASE_URL + "/contract/analyze-text")
-                        .addHeader("Authorization", "Bearer " + token)
+                        .addHeader(HEADER_AUTH, BEARER_PREFIX + token)
                         .post(RequestBody.create(body.toString(), JSON_TYPE))
                         .build();
 

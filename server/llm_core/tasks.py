@@ -74,10 +74,7 @@ def _normalize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
 
 CONTRACT_OCR_PROMPT = (
     "이미지에 적힌 모든 글자를 그대로 옮겨 적어주세요. "
-    "줄 순서와 줄바꿈은 보이는 대로 유지하고, "
-    "설명·요약·해석은 덧붙이지 마세요. "
-    "텍스트가 전혀 없으면 [NO_TEXT]만 출력하고, "
-    "읽기 어려운 글자는 [?]로 표시하세요."
+    "줄 순서와 줄바꿈은 보이는 대로 유지하세요."
 )
 
 
@@ -105,10 +102,6 @@ NEGOTIATION_SCRIPT_PROMPT = """당신은 세입자가 임대인에게 보낼 협
 5. 결과는 평문 텍스트. JSON·마크다운·코드블록 사용 금지."""
 
 
-FALLBACK_ANALYSIS_PROMPT = (
-    TOXIC_DETECTOR_SYSTEM_PROMPT
-    + "\n\n[계약서 내용]\n{contract_text}\n"
-)
 
 
 async def describe_image(
@@ -193,8 +186,8 @@ _ADDRESS_UNKNOWN = "주소 불명"
 
 ADDRESS_EXTRACT_PROMPT = (
     "계약서 텍스트에서 임차주택(계약 대상 건물)의 주소를 추출하세요.\n"
-    "반드시 아래 JSON 형식만 출력하세요: {\"address\": \"전체 주소\"}\n"
-    f"주소를 찾을 수 없으면 {{\"address\": \"{_ADDRESS_UNKNOWN}\"}}을 출력하세요.\n\n"
+    '반드시 아래 JSON 형식만 출력하세요: {{"address": "전체 주소"}}\n'
+    f'{{"address": "{_ADDRESS_UNKNOWN}"}}을 찾을 수 없으면 위 형식으로 출력하세요.\n\n'
     "[계약서 내용]\n{contract_text}"
 )
 
@@ -236,7 +229,7 @@ async def analyze_contract(
     else:
         # 폴백: 일반 텍스트 모델에 전체 프롬프트를 직접 주입
         cfg = get_text_config().merged(temperature=0.1, format="json", num_ctx=16384)
-        prompt = FALLBACK_ANALYSIS_PROMPT.format(contract_text=contract_text)
+        prompt = TOXIC_DETECTOR_SYSTEM_PROMPT + "\n\n[계약서 내용]\n" + contract_text + "\n"
 
     try:
         raw = await cli.generate_json(prompt, cfg)

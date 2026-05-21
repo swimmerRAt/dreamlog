@@ -43,7 +43,9 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form.username).first()
+    user = db.query(User).filter(
+        (User.username == form.username) | (User.email == form.username)
+    ).first()
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="사용자명 또는 비밀번호가 올바르지 않습니다.")
 

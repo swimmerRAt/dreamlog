@@ -27,8 +27,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class SignUp {
-    @SuppressWarnings("java:S1313")
-    private static final String BASE_URL = "http://10.0.2.2:8000";
     private static final MediaType JSON_TYPE = MediaType.get("application/json; charset=utf-8");
     private final OkHttpClient httpClient = new OkHttpClient();
 
@@ -41,11 +39,6 @@ public class SignUp {
 
     private final Activity activity;
     private final Runnable onBackToLogin;
-
-    private EditText editName;
-    private EditText editEmail;
-    private EditText editPassword;
-    private EditText editPasswordConfirm;
 
     SignUp(Activity activity, Runnable onBackToLogin) {
         this.activity = activity;
@@ -102,21 +95,21 @@ public class SignUp {
 
         card.addView(text("정보를 입력해주세요", 18, TEXT, Typeface.BOLD, Gravity.CENTER, 0));
 
-        editName = input("이름", InputType.TYPE_CLASS_TEXT, dp(20));
-        editEmail = input("이메일 주소", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, dp(10));
-        editPassword = input("비밀번호 (6자 이상)", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10));
-        editPasswordConfirm = input("비밀번호 확인", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10));
+        EditText editName            = input("이름", InputType.TYPE_CLASS_TEXT, dp(20));
+        EditText editEmail           = input("이메일 주소", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, dp(10));
+        EditText editPassword        = input("비밀번호 (6자 이상)", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10));
+        EditText editPasswordConfirm = input("비밀번호 확인", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10));
 
         card.addView(editName);
         card.addView(editEmail);
         card.addView(editPassword);
         card.addView(editPasswordConfirm);
-        card.addView(signupButton());
+        card.addView(signupButton(editName, editEmail, editPassword, editPasswordConfirm));
         card.addView(loginLink());
         return card;
     }
 
-    private View signupButton() {
+    private View signupButton(EditText editName, EditText editEmail, EditText editPassword, EditText editPasswordConfirm) {
         TextView button = new TextView(activity);
         button.setText("가입하기");
         button.setTextColor(Color.WHITE);
@@ -170,7 +163,7 @@ public class SignUp {
             body.put("password", password);
 
             Request request = new Request.Builder()
-                    .url(BASE_URL + "/auth/register")
+                    .url(ApiContract.BASE_URL + "/auth/register")
                     .post(RequestBody.create(body.toString(), JSON_TYPE))
                     .build();
 
