@@ -10,6 +10,10 @@ final class ApiContract {
     private ApiContract() {
     }
 
+    // 에뮬레이터: 10.0.2.2 / 실기기: Mac LAN IP (예: 192.168.x.x)
+    @SuppressWarnings("java:S1313")
+    static final String BASE_URL = "http://10.0.2.2:8000";
+
     static final String EXTRA_CONTRACT_TEXT = "contractText";
     static final String EXTRA_SESSION_ID = "sessionId";
     static final String EXTRA_TEMPLATE_ID = "templateId";
