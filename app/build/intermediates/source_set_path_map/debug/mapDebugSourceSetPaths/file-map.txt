@@ -1,7 +1,0 @@
-com.example.basicandroidapp-pngs-0 /Volumes/ExternalSSD/ANS/dreamlog/app/build/generated/res/pngs/debug
-com.example.basicandroidapp-resValues-1 /Volumes/ExternalSSD/ANS/dreamlog/app/build/generated/res/resValues/debug
-com.example.basicandroidapp-packageDebugResources-2 /Volumes/ExternalSSD/ANS/dreamlog/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
-com.example.basicandroidapp-packageDebugResources-3 /Volumes/ExternalSSD/ANS/dreamlog/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
-com.example.basicandroidapp-debug-4 /Volumes/ExternalSSD/ANS/dreamlog/app/build/intermediates/merged_res/debug/mergeDebugResources
-com.example.basicandroidapp-debug-5 /Volumes/ExternalSSD/ANS/dreamlog/app/src/debug/res
-com.example.basicandroidapp-main-6 /Volumes/ExternalSSD/ANS/dreamlog/app/src/main/res
