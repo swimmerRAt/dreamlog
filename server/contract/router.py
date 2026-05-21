@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Annotated, List, Optional
 from datetime import datetime
 import json
+import traceback
 from database import get_db, Analysis, User
 from auth.utils import get_current_user
 from ocr import extract_text
@@ -54,6 +55,30 @@ class AnalyzeTextRequest(BaseModel):
 
 DbDep = Annotated[Session, Depends(get_db)]
 UserDep = Annotated[User, Depends(get_current_user)]
+
+
+@router.post("/ocr")
+async def ocr_only(
+    file: UploadFile = File(...),
+    current_user: UserDep = None,
+):
+    """OCR만 수행하고 텍스트를 반환. 다중 페이지 처리용."""
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다. (JPEG, PNG, WEBP, HEIC 지원)")
+
+    image_bytes = await file.read()
+    if len(image_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="파일 크기가 10MB를 초과합니다.")
+
+    try:
+        extracted_text = await extract_text(image_bytes)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OCR 처리 실패: {str(e)}")
+
+    if not extracted_text.strip():
+        raise HTTPException(status_code=422, detail="계약서에서 텍스트를 추출할 수 없습니다.")
+
+    return {"text": extracted_text}
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
@@ -111,7 +136,10 @@ async def analyze_text(
     try:
         result = await llm_analyze(text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"계약서 분석 실패: {str(e)}")
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        tb_str = traceback.format_exc()
+        print(f"[ERROR] analyze_text failed: {error_msg}\n{tb_str}", flush=True)
+        raise HTTPException(status_code=502, detail=f"계약서 분석 실패: {error_msg}")
 
     analysis = Analysis(
         user_id=current_user.id,
