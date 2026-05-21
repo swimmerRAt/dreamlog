@@ -1,14 +1,17 @@
 package com.example.basicandroidapp;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.widget.Toast;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,6 +21,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class ExpertComment extends Activity {
+    static final String EXTRA_DANGER_COUNT  = "extra_danger_count";
+    static final String EXTRA_CAUTION_COUNT = "extra_caution_count";
+
     private static final int BACKGROUND = Color.rgb(248, 249, 250);
     private static final int PRIMARY = Color.rgb(63, 81, 181);
     private static final int TEXT = Color.rgb(33, 33, 33);
@@ -34,10 +40,12 @@ public class ExpertComment extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(createView());
+        int dangerCount  = getIntent().getIntExtra(EXTRA_DANGER_COUNT,  0);
+        int cautionCount = getIntent().getIntExtra(EXTRA_CAUTION_COUNT, 0);
+        setContentView(createView(dangerCount, cautionCount));
     }
 
-    private View createView() {
+    private View createView(int dangerCount, int cautionCount) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BACKGROUND);
@@ -52,7 +60,7 @@ public class ExpertComment extends Activity {
         content.setPadding(0, 0, 0, dp(18));
         scroll.addView(content);
 
-        content.addView(heroHeader());
+        content.addView(heroHeader(dangerCount, cautionCount));
         content.addView(sectionLabel());
         content.addView(expertCard("김민준 변호사", "임대차 전문", "4.9", "리뷰 127개", 0));
         content.addView(expertCard("이서연 공인중개사", "전세계약 전문", "4.7", "리뷰 89개", 10));
@@ -95,7 +103,7 @@ public class ExpertComment extends Activity {
         return bar;
     }
 
-    private View heroHeader() {
+    private View heroHeader(int dangerCount, int cautionCount) {
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
         hero.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -113,7 +121,10 @@ public class ExpertComment extends Activity {
         titleParams.setMargins(0, dp(14), 0, 0);
         hero.addView(title, titleParams);
 
-        TextView subtitle = text("위험 조항 2건이 발견되었습니다.\n전문가와 함께 계약서를 검토하세요.", alphaWhite(0.8f), 14, Typeface.NORMAL);
+        String subtitleText = dangerCount > 0
+                ? "위험 조항 " + dangerCount + "건이 발견되었습니다.\n전문가와 함께 계약서를 검토하세요."
+                : "전문가와 함께 계약서를 꼼꼼히 검토하세요.";
+        TextView subtitle = text(subtitleText, alphaWhite(0.8f), 14, Typeface.NORMAL);
         subtitle.setGravity(Gravity.CENTER);
         subtitle.setLineSpacing(0, 1.6f);
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
@@ -131,8 +142,8 @@ public class ExpertComment extends Activity {
         );
         pillsParams.setMargins(0, dp(16), 0, 0);
         hero.addView(pills, pillsParams);
-        pills.addView(heroPill("위험 2건", 0));
-        pills.addView(heroPill("주의 3건", 8));
+        if (dangerCount > 0)  pills.addView(heroPill("위험 " + dangerCount + "건", 0));
+        if (cautionCount > 0) pills.addView(heroPill("주의 " + cautionCount + "건", dangerCount > 0 ? 8 : 0));
         return hero;
     }
 
@@ -195,6 +206,10 @@ public class ExpertComment extends Activity {
         button.setGravity(Gravity.CENTER);
         button.setPadding(dp(12), 0, dp(12), 0);
         button.setBackground(roundRect(CARD, dp(8), PRIMARY, Math.max(1, dp(1.5f))));
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setOnClickListener(v ->
+                Toast.makeText(this, "전문가 연결 서비스는 준비 중입니다.", Toast.LENGTH_SHORT).show());
         card.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)));
         return card;
     }
@@ -224,8 +239,14 @@ public class ExpertComment extends Activity {
         rowParams.setMargins(0, dp(14), 0, 0);
         wrapper.addView(row, rowParams);
 
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> {
+            Intent dial = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:16705520"));
+            startActivity(dial);
+        });
         row.addView(text("☎", PRIMARY, 20, Typeface.BOLD), new LinearLayout.LayoutParams(dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
-        TextView phone = text("긴급 법률 상담  1588-0000", TEXT, 14, Typeface.BOLD);
+        TextView phone = text("주거임대차 분쟁 상담  1670-5520", TEXT, 14, Typeface.BOLD);
         LinearLayout.LayoutParams phoneParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         phoneParams.setMargins(dp(10), 0, 0, 0);
         row.addView(phone, phoneParams);

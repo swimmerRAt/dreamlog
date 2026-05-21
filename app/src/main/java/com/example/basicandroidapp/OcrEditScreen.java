@@ -63,8 +63,6 @@ public class OcrEditScreen extends Activity {
                     + "전세금 반환이 지연되는 경우 임대인은 책임을 면할 수 있다.\n"
                     + "수리비 일체는 임차인이 부담한다.";
 
-    @SuppressWarnings("java:S1313")
-    private static final String BASE_URL = "http://10.0.2.2:8000";
     private static final MediaType JSON_TYPE = MediaType.get("application/json; charset=utf-8");
 
     private static final int REQUEST_CAMERA = 2001;
@@ -92,6 +90,8 @@ public class OcrEditScreen extends Activity {
     private TextView countText;
     private FrameLayout loadingOverlay;
     private Uri cameraImageUri;
+    private String cachedOcrText = null;
+    private String cachedAnalysisJson = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -189,7 +189,7 @@ public class OcrEditScreen extends Activity {
 
                 String token = getToken();
                 Request request = new Request.Builder()
-                        .url(BASE_URL + "/contract/analyze")
+                        .url(ApiContract.BASE_URL + "/contract/analyze")
                         .addHeader("Authorization", "Bearer " + token)
                         .post(requestBody)
                         .build();
@@ -199,6 +199,8 @@ public class OcrEditScreen extends Activity {
                     if (response.isSuccessful()) {
                         JSONObject json = new JSONObject(responseBody);
                         String ocrText = json.optString("original_text", "");
+                        cachedOcrText = ocrText;
+                        cachedAnalysisJson = responseBody;
                         runOnUiThread(() -> {
                             showLoading(false);
                             contractTextInput.setEnabled(true);
@@ -232,6 +234,14 @@ public class OcrEditScreen extends Activity {
             return;
         }
 
+        if (cachedAnalysisJson != null && contractText.equals(cachedOcrText)) {
+            Intent intent = new Intent(this, AnalysisResultScreen.class);
+            intent.putExtra(EXTRA_CONTRACT_TEXT, contractText);
+            intent.putExtra(AnalysisResultScreen.EXTRA_ANALYSIS_RESULT, cachedAnalysisJson);
+            startActivity(intent);
+            return;
+        }
+
         showLoading(true);
 
         new Thread(() -> {
@@ -241,7 +251,7 @@ public class OcrEditScreen extends Activity {
 
                 String token = getToken();
                 Request request = new Request.Builder()
-                        .url(BASE_URL + "/contract/analyze-text")
+                        .url(ApiContract.BASE_URL + "/contract/analyze-text")
                         .addHeader("Authorization", "Bearer " + token)
                         .post(RequestBody.create(body.toString(), JSON_TYPE))
                         .build();

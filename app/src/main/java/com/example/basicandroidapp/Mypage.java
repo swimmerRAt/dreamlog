@@ -24,15 +24,14 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 class Mypage {
-    @SuppressWarnings("java:S1313")
-    private static final String BASE_URL = "http://10.0.2.2:8000";
-
     private static final int PRIMARY   = Color.rgb(63, 81, 181);
     private static final int TEXT      = Color.rgb(33, 33, 33);
     private static final int SECONDARY = Color.rgb(117, 117, 117);
     private static final int BORDER    = Color.rgb(224, 224, 224);
     private static final int BG        = Color.rgb(245, 246, 250);
     private static final int DANGER    = Color.rgb(211, 47, 47);
+
+    private static final String NO_HISTORY = "기록 없음";
 
     private final Activity activity;
     private final Runnable onLogout;
@@ -118,8 +117,7 @@ class Mypage {
         card.addView(sectionTitle("기록 통계"));
         card.addView(divider());
         out[0] = mutableInfoRow(card, "전체 분석", "0개");
-        card.addView(infoRow("즐겨찾기", "0개"));
-        out[1] = mutableInfoRow(card, "마지막 분석", "기록 없음");
+        out[1] = mutableInfoRow(card, "마지막 분석", NO_HISTORY);
         return card;
     }
 
@@ -158,7 +156,7 @@ class Mypage {
     private void loadUserInfo(String token, TextView[] profile) {
         try {
             Request req = new Request.Builder()
-                    .url(BASE_URL + "/auth/me")
+                    .url(ApiContract.BASE_URL + "/auth/me")
                     .addHeader("Authorization", "Bearer " + token)
                     .get().build();
             try (Response resp = httpClient.newCall(req).execute()) {
@@ -174,15 +172,27 @@ class Mypage {
                             profile[0].setText(String.valueOf(name.charAt(0)).toUpperCase());
                         }
                     });
+                } else {
+                    activity.runOnUiThread(() -> {
+                        profile[0].setText("!");
+                        profile[1].setText("불러오기 실패");
+                        profile[2].setText("불러오기 실패");
+                    });
                 }
             }
-        } catch (IOException | org.json.JSONException ignored) { /* no-op */ }
+        } catch (IOException | org.json.JSONException ignored) {
+            activity.runOnUiThread(() -> {
+                profile[0].setText("!");
+                profile[1].setText("연결 실패");
+                profile[2].setText("연결 실패");
+            });
+        }
     }
 
     private void loadHistory(String token, TextView[] stats) {
         try {
             Request req = new Request.Builder()
-                    .url(BASE_URL + "/contract/history")
+                    .url(ApiContract.BASE_URL + "/contract/history")
                     .addHeader("Authorization", "Bearer " + token)
                     .get().build();
             try (Response resp = httpClient.newCall(req).execute()) {
@@ -190,7 +200,7 @@ class Mypage {
                 if (resp.isSuccessful()) {
                     JSONArray arr = new JSONArray(body);
                     int total = arr.length();
-                    String last = "기록 없음";
+                    String last = NO_HISTORY;
                     if (total > 0) {
                         String date = arr.getJSONObject(0).optString("created_at", "");
                         if (date.length() >= 10) last = date.substring(0, 10);
@@ -200,9 +210,19 @@ class Mypage {
                         stats[0].setText(total + "개");
                         stats[1].setText(finalLast);
                     });
+                } else {
+                    activity.runOnUiThread(() -> {
+                        stats[0].setText("0개");
+                        stats[1].setText(NO_HISTORY);
+                    });
                 }
             }
-        } catch (IOException | org.json.JSONException ignored) { /* no-op */ }
+        } catch (IOException | org.json.JSONException ignored) {
+            activity.runOnUiThread(() -> {
+                stats[0].setText("0개");
+                stats[1].setText(NO_HISTORY);
+            });
+        }
     }
 
     private String getToken() {
@@ -274,37 +294,6 @@ class Mypage {
         params.setMargins(0, dp(10), 0, dp(10));
         line.setLayoutParams(params);
         return line;
-    }
-
-    private View infoRow(String label, String value) {
-        LinearLayout row = new LinearLayout(activity);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        rowParams.setMargins(0, dp(5), 0, dp(5));
-        row.setLayoutParams(rowParams);
-
-        TextView labelView = new TextView(activity);
-        labelView.setText(label);
-        labelView.setTextColor(SECONDARY);
-        labelView.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(14));
-        labelView.setLayoutParams(new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        TextView valueView = new TextView(activity);
-        valueView.setText(value);
-        valueView.setTextColor(TEXT);
-        valueView.setTextSize(TypedValue.COMPLEX_UNIT_PX, sp(14));
-        valueView.setGravity(Gravity.END);
-        valueView.setLayoutParams(new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        row.addView(labelView);
-        row.addView(valueView);
-        return row;
     }
 
     private int dp(float value) {

@@ -1,6 +1,7 @@
 package com.example.basicandroidapp;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -8,7 +9,15 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.pdf.PdfDocument;
 import android.os.Bundle;
+import android.os.CancellationSignal;
+import android.os.ParcelFileDescriptor;
+import android.print.PageRange;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintDocumentInfo;
+import android.print.PrintManager;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -17,6 +26,10 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -172,6 +185,9 @@ public class ReportSummary extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         TextView download = text("↓", PRIMARY, 26, Typeface.BOLD);
         download.setGravity(Gravity.CENTER);
+        download.setClickable(true);
+        download.setFocusable(true);
+        download.setOnClickListener(v -> savePdf());
         bar.addView(download, new FrameLayout.LayoutParams(
                 dp(56), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END));
         View divider = new View(this);
@@ -353,7 +369,12 @@ public class ReportSummary extends Activity {
         banner.setGravity(Gravity.CENTER_VERTICAL);
         banner.setClickable(true);
         banner.setFocusable(true);
-        banner.setOnClickListener(v -> startActivity(new Intent(this, ExpertComment.class)));
+        banner.setOnClickListener(v -> {
+            Intent intent = new Intent(this, ExpertComment.class);
+            intent.putExtra(ExpertComment.EXTRA_DANGER_COUNT,  dangerCount);
+            intent.putExtra(ExpertComment.EXTRA_CAUTION_COUNT, cautionCount);
+            startActivity(intent);
+        });
         banner.setBackground(roundRect(Color.rgb(232, 234, 246), dp(12), 0, 0));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -392,9 +413,11 @@ public class ReportSummary extends Activity {
         bar.setPadding(dp(16), dp(12), dp(16), dp(24));
         bar.setBackgroundColor(Color.WHITE);
         bar.setElevation(dp(8));
-        bar.addView(bottomButton("PDF 저장", Color.WHITE, PRIMARY, PRIMARY, 0, false));
+        bar.addView(bottomButton("PDF 저장", Color.WHITE, PRIMARY, PRIMARY, 0, false,
+                this::savePdf));
         bar.addView(bottomButton("카카오톡 공유", Color.rgb(254, 229, 0),
-                Color.rgb(25, 25, 25), 0, dp(10), true));
+                Color.rgb(25, 25, 25), 0, dp(10), true,
+                this::shareReport));
         return bar;
     }
 
@@ -410,10 +433,14 @@ public class ReportSummary extends Activity {
         return row;
     }
 
-    private View bottomButton(String label, int bg, int fg, int border, int left, boolean kakao) {
+    private View bottomButton(String label, int bg, int fg, int border, int left, boolean kakao,
+                              Runnable onClick) {
         LinearLayout button = new LinearLayout(this);
         button.setGravity(Gravity.CENTER);
         button.setOrientation(LinearLayout.HORIZONTAL);
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setOnClickListener(v -> onClick.run());
         button.setBackground(roundRect(bg, dp(12), border,
                 border == 0 ? 0 : Math.max(1, dp(1.5f))));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(52), 1);
@@ -484,6 +511,144 @@ public class ReportSummary extends Activity {
         p.setMargins(dp(left), 0, 0, 0);
         v.setLayoutParams(p);
         return v;
+    }
+
+    private void savePdf() {
+        PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
+        if (pm == null) {
+            Toast.makeText(this, "인쇄 서비스를 사용할 수 없습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String jobName = address.isEmpty() ? "계약서_분석_리포트" : address.replace(" ", "_") + "_리포트";
+        pm.print(jobName, new PrintDocumentAdapter() {
+            @Override
+            public void onLayout(PrintAttributes oldAttrs, PrintAttributes newAttrs,
+                                 CancellationSignal signal, LayoutResultCallback callback, Bundle extras) {
+                callback.onLayoutFinished(
+                        new PrintDocumentInfo.Builder("계약서_분석_리포트.pdf")
+                                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                                .setPageCount(1)
+                                .build(), !newAttrs.equals(oldAttrs));
+            }
+
+            @Override
+            public void onWrite(PageRange[] pages, ParcelFileDescriptor dest,
+                                CancellationSignal signal, WriteResultCallback callback) {
+                PdfDocument pdf = new PdfDocument();
+                PdfDocument.Page page = pdf.startPage(
+                        new PdfDocument.PageInfo.Builder(595, 842, 1).create());
+                drawReportOnCanvas(page.getCanvas());
+                pdf.finishPage(page);
+                try (FileOutputStream fos = new FileOutputStream(dest.getFileDescriptor())) {
+                    pdf.writeTo(fos);
+                    callback.onWriteFinished(new PageRange[]{PageRange.ALL_PAGES});
+                } catch (IOException e) {
+                    callback.onWriteFailed(e.getMessage());
+                } finally {
+                    pdf.close();
+                }
+            }
+        }, new PrintAttributes.Builder()
+                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                .build());
+    }
+
+    private void drawReportOnCanvas(Canvas canvas) {
+        Paint titlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        titlePaint.setTypeface(Typeface.DEFAULT_BOLD);
+        titlePaint.setTextSize(18);
+        titlePaint.setColor(Color.BLACK);
+
+        Paint bodyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bodyPaint.setTextSize(12);
+        bodyPaint.setColor(Color.BLACK);
+
+        Paint subPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        subPaint.setTextSize(11);
+        subPaint.setColor(Color.GRAY);
+
+        int x = 40;
+        int y = 50;
+
+        canvas.drawText("계약서 안전 분석 리포트", x, y, titlePaint); y += 30;
+        canvas.drawText("─────────────────────────────────────────────", x, y, subPaint); y += 20;
+        if (!address.isEmpty()) { canvas.drawText("주소: " + address, x, y, bodyPaint); y += 20; }
+        canvas.drawText("위험도: " + riskLevel, x, y, bodyPaint); y += 20;
+        canvas.drawText("안전 점수: " + score + "점", x, y, bodyPaint); y += 40;
+
+        y = drawClauses(canvas, "[ 위험 조항 " + dangerCount + "건 ]",
+                dangerClauses, titlePaint, bodyPaint, subPaint, y);
+        y = drawClauses(canvas, "[ 주의 조항 " + cautionCount + "건 ]",
+                cautionClauses, titlePaint, bodyPaint, subPaint, y);
+        drawSummary(canvas, summary, titlePaint, bodyPaint, y);
+    }
+
+    // x=40, lineH=20, pageH=800 은 PDF 고정값
+    private int drawClauses(Canvas canvas, String header,
+                             List<AnalysisResultScreen.ToxicClause> clauses,
+                             Paint titleP, Paint bodyP, Paint subP, int y) {
+        if (clauses.isEmpty()) return y;
+        canvas.drawText(header, 40, y, titleP); y += 20;
+        for (AnalysisResultScreen.ToxicClause tc : clauses) {
+            if (y > 800) break;
+            canvas.drawText("• " + clip(tc.clause, 60), 50, y, bodyP); y += 20;
+            if (!tc.reason.isEmpty()) {
+                canvas.drawText("  → " + clip(tc.reason, 65), 50, y, subP); y += 20;
+            }
+        }
+        return y + 8;
+    }
+
+    private void drawSummary(Canvas canvas, String text, Paint titleP, Paint bodyP, int y) {
+        if (text.isEmpty() || y > 800) return;
+        canvas.drawText("[ 종합 의견 ]", 40, y, titleP); y += 20;
+        String s = text;
+        while (s.length() > 60 && y <= 800) {
+            canvas.drawText(s.substring(0, 60), 40, y, bodyP);
+            s = s.substring(60);
+            y += 20;
+        }
+        if (!s.isEmpty() && y <= 800) canvas.drawText(s, 40, y, bodyP);
+    }
+
+    private static String clip(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
+    }
+
+    private void shareReport() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("📄 계약서 안전 분석 리포트\n\n");
+        if (!address.isEmpty()) sb.append("📍 주소: ").append(address).append("\n");
+        sb.append("⚡ 위험도: ").append(riskLevel).append("\n");
+        sb.append("🔒 안전 점수: ").append(score).append("점\n\n");
+        if (!dangerClauses.isEmpty()) {
+            sb.append("🚨 위험 조항 ").append(dangerCount).append("건\n");
+            for (AnalysisResultScreen.ToxicClause tc : dangerClauses) {
+                sb.append("• ").append(tc.clause).append("\n");
+            }
+            sb.append("\n");
+        }
+        if (!cautionClauses.isEmpty()) {
+            sb.append("⚠ 주의 조항 ").append(cautionCount).append("건\n");
+            for (AnalysisResultScreen.ToxicClause tc : cautionClauses) {
+                sb.append("• ").append(tc.clause).append("\n");
+            }
+            sb.append("\n");
+        }
+        if (!summary.isEmpty()) sb.append("💬 ").append(summary).append("\n");
+
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "계약서 분석 리포트");
+        intent.putExtra(Intent.EXTRA_TEXT, sb.toString());
+        intent.setPackage("com.kakao.talk");
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            // 카카오톡 미설치 시 일반 공유 시트로 대체
+            intent.setPackage(null);
+            startActivity(Intent.createChooser(intent, "리포트 공유"));
+        }
     }
 
     private View divider() {
