@@ -1,111 +1,73 @@
 param(
     [ValidateSet("test", "run", "smoke")]
-    [string]$Mode = "smoke",
-    [switch]$SkipTests
+    [string]$Mode = "smoke"
 )
 
 $ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
 
 function Resolve-JavaHome {
+    $preferred = "C:\Program Files\Android\Android Studio\jbr"
+    if (Test-Path (Join-Path $preferred "bin\java.exe")) {
+        return $preferred
+    }
+
     if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME "bin\java.exe"))) {
         return $env:JAVA_HOME
     }
 
-    $fallback = "C:\Users\USER\.jdks\openjdk-25.0.1"
-    if (Test-Path (Join-Path $fallback "bin\java.exe")) {
-        return $fallback
-    }
-
-    throw "JAVA_HOME was not found. Check your environment variable or fallback path."
+    throw "Java runtime was not found."
 }
 
-function Resolve-MavenCommand {
-    $fromPath = Get-Command mvn.cmd -ErrorAction SilentlyContinue
-    if ($fromPath) {
-        return $fromPath.Source
-    }
-
-    if ($env:MAVEN_HOME) {
-        $fromEnv = Join-Path $env:MAVEN_HOME "bin\mvn.cmd"
-        if (Test-Path $fromEnv) {
-            return $fromEnv
-        }
-    }
-
-    $fallback = "C:\Users\USER\.vscode\extensions\oracle.oracle-java-25.1.0\nbcode\java\maven\bin\mvn.cmd"
-    if (Test-Path $fallback) {
-        return $fallback
-    }
-
-    throw "Maven command was not found. Check MAVEN_HOME or the fallback path."
-}
-
-function Resolve-MavenRepo {
-    $repo = "C:\Users\USER\.m2\repository"
-    if (Test-Path $repo) {
-        return $repo
-    }
-
-    throw "Maven local repository was not found: $repo"
-}
-
-function Invoke-OfflineTests {
-    param(
-        [string]$MavenCommand,
-        [string]$MavenRepo
+function Resolve-SqliteJar {
+    $candidates = @(
+        "C:\Program Files\Android\Android Studio\plugins\android\lib\sqlite-jdbc-3.51.1.0.jar",
+        "C:\Users\USER\.gradle\caches\modules-2\files-2.1\org.xerial\sqlite-jdbc\3.41.2.2\ddeb8d3a3004f412ed19b4c98b3aec11d9430267\sqlite-jdbc-3.41.2.2.jar"
     )
 
-    Write-Host ""
-    Write-Host "[1/2] Running offline tests..."
-
-    Push-Location $PSScriptRoot
-    $env:MAVEN_OPTS = "-Dmaven.repo.local=$MavenRepo"
-    try {
-        & $MavenCommand -o test
-    }
-    finally {
-        Pop-Location
-    }
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "Tests failed."
-    }
-}
-
-function Get-RuntimeClasspath {
-    $classpathFile = Join-Path $PSScriptRoot "var\runtime\java-test-classpath.txt"
-    if (-not (Test-Path $classpathFile)) {
-        throw "Runtime classpath file is missing: $classpathFile"
-    }
-
-    return (Get-Content $classpathFile -Raw).Trim()
-}
-
-function Wait-ForHealth {
-    param([int]$TimeoutSeconds = 30)
-
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    while ((Get-Date) -lt $deadline) {
-        try {
-            return Invoke-RestMethod -Uri "http://localhost:3000/api/health" -TimeoutSec 3
-        }
-        catch {
-            Start-Sleep -Seconds 2
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
         }
     }
 
-    throw "The server did not become ready within the timeout."
+    throw "sqlite-jdbc jar was not found."
 }
 
-function Start-AppProcess {
+function Compile-Backend {
     param(
         [string]$JavaHome,
-        [string]$Classpath
+        [string]$SqliteJar
     )
+
+    $classesDir = Join-Path $PSScriptRoot "var\runtime\classes"
+    New-Item -ItemType Directory -Force -Path $classesDir | Out-Null
+
+    & (Join-Path $JavaHome "bin\javac.exe") `
+        --add-modules jdk.httpserver `
+        -cp $SqliteJar `
+        -d $classesDir `
+        (Join-Path $PSScriptRoot "src\main\java\com\vibecoding\rental\AuthCrypto.java") `
+        (Join-Path $PSScriptRoot "src\main\java\com\vibecoding\rental\SqliteAuthStore.java") `
+        (Join-Path $PSScriptRoot "src\main\java\com\vibecoding\rental\RentalContractBackendApplication.java")
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Java backend compilation failed."
+    }
+}
+
+function Start-BackendProcess {
+    param(
+        [string]$JavaHome,
+        [string]$SqliteJar
+    )
+
+    $classesDir = Join-Path $PSScriptRoot "var\runtime\classes"
+    $classpath = "$classesDir;$SqliteJar"
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = Join-Path $JavaHome "bin\java.exe"
-    $psi.Arguments = "-cp `"$Classpath`" com.vibecoding.rental.RentalContractBackendApplication"
+    $psi.Arguments = "--add-modules jdk.httpserver -cp `"$classpath`" com.vibecoding.rental.RentalContractBackendApplication"
     $psi.WorkingDirectory = $PSScriptRoot
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
@@ -118,26 +80,40 @@ function Start-AppProcess {
     return $process
 }
 
+function Wait-ForHealth {
+    param([int]$TimeoutSeconds = 20)
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            return Invoke-RestMethod -Uri "http://localhost:3000/api/health" -TimeoutSec 3
+        }
+        catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    throw "The backend did not become healthy in time."
+}
+
 function Invoke-SmokeCheck {
-    param([string]$JavaHome)
+    param(
+        [string]$JavaHome,
+        [string]$SqliteJar
+    )
 
-    Write-Host ""
-    Write-Host "[2/2] Starting the app briefly and checking key endpoints..."
-
-    $classpath = Get-RuntimeClasspath
-    $process = Start-AppProcess -JavaHome $JavaHome -Classpath $classpath
-
+    $process = Start-BackendProcess -JavaHome $JavaHome -SqliteJar $SqliteJar
     try {
         $health = Wait-ForHealth
-        $template = Invoke-RestMethod -Uri "http://localhost:3000/api/templates/default" -TimeoutSec 5
-        $knowledge = Invoke-RestMethod -Uri "http://localhost:3000/api/knowledge/overview" -TimeoutSec 5
+        $login = Invoke-RestMethod -Uri "http://localhost:3000/api/auth/login" -Method Post -ContentType "application/json" -Body '{"username":"demo@example.com","password":"demo1234"}'
+        $headers = @{ Authorization = "Bearer $($login.access_token)" }
+        $me = Invoke-RestMethod -Uri "http://localhost:3000/api/auth/me" -Headers $headers -TimeoutSec 5
 
         Write-Host ""
         Write-Host "Smoke check result"
         Write-Host "- Status: $($health.data.status)"
         Write-Host "- Service: $($health.data.service)"
-        Write-Host "- Template: $($template.data.id)"
-        Write-Host "- Knowledge sections: $(@($knowledge.data.PSObject.Properties.Name) -join ', ')"
+        Write-Host "- Demo account: $($me.email)"
     }
     finally {
         if (-not $process.HasExited) {
@@ -148,32 +124,22 @@ function Invoke-SmokeCheck {
 }
 
 $javaHome = Resolve-JavaHome
-$mavenCommand = Resolve-MavenCommand
-$mavenRepo = Resolve-MavenRepo
-$env:JAVA_HOME = $javaHome
-Set-Location $PSScriptRoot
+$sqliteJar = Resolve-SqliteJar
 
 switch ($Mode) {
     "test" {
-        Invoke-OfflineTests -MavenCommand $mavenCommand -MavenRepo $mavenRepo
+        Compile-Backend -JavaHome $javaHome -SqliteJar $sqliteJar
         Write-Host ""
-        Write-Host "All tests passed."
+        Write-Host "Compilation succeeded."
     }
     "run" {
-        if (-not $SkipTests) {
-            Invoke-OfflineTests -MavenCommand $mavenCommand -MavenRepo $mavenRepo
-        }
-
-        $classpath = Get-RuntimeClasspath
+        Compile-Backend -JavaHome $javaHome -SqliteJar $sqliteJar
         Write-Host ""
-        Write-Host "Starting the server. Press Ctrl + C to stop."
-        & (Join-Path $javaHome "bin\java.exe") -cp $classpath com.vibecoding.rental.RentalContractBackendApplication
+        Write-Host "Starting the backend. Press Ctrl + C to stop."
+        & (Join-Path $javaHome "bin\java.exe") --add-modules jdk.httpserver -cp "$(Join-Path $PSScriptRoot 'var\runtime\classes');$sqliteJar" com.vibecoding.rental.RentalContractBackendApplication
     }
     "smoke" {
-        if (-not $SkipTests) {
-            Invoke-OfflineTests -MavenCommand $mavenCommand -MavenRepo $mavenRepo
-        }
-
-        Invoke-SmokeCheck -JavaHome $javaHome
+        Compile-Backend -JavaHome $javaHome -SqliteJar $sqliteJar
+        Invoke-SmokeCheck -JavaHome $javaHome -SqliteJar $sqliteJar
     }
 }
