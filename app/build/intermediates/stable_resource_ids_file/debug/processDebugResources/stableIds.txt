@@ -1,9 +1,0 @@
-com.example.basicandroidapp:style/Theme.BasicAndroidApp = 0x7f050000
-com.example.basicandroidapp:string/app_name = 0x7f040000
-com.example.basicandroidapp:mipmap/ic_launcher_round = 0x7f030001
-com.example.basicandroidapp:mipmap/ic_launcher = 0x7f030000
-com.example.basicandroidapp:color/primary = 0x7f010000
-com.example.basicandroidapp:drawable/ic_launcher_foreground = 0x7f020000
-com.example.basicandroidapp:color/screen_background = 0x7f010002
-com.example.basicandroidapp:color/primary_dark = 0x7f010001
-com.example.basicandroidapp:color/white = 0x7f010003
