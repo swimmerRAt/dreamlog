@@ -11,6 +11,7 @@ import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
+import android.util.Patterns;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -20,6 +21,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class Login extends Activity {
     private static final int PRIMARY = Color.rgb(63, 81, 181);
@@ -32,14 +34,18 @@ public class Login extends Activity {
 
     private Activity hostActivity;
     private Runnable onLogin;
+    private Runnable onSignup;
+    private EditText editEmail;
+    private EditText editPassword;
 
     public Login() {
         hostActivity = this;
     }
 
-    Login(Activity activity, Runnable onLogin) {
+    Login(Activity activity, Runnable onLogin, Runnable onSignup) {
         hostActivity = activity;
         this.onLogin = onLogin;
+        this.onSignup = onSignup;
     }
 
     @Override
@@ -124,8 +130,10 @@ public class Login extends Activity {
         card.addView(socialButton("G", GOOGLE_BLUE, "Google로 계속하기", Color.WHITE, TEXT, dp(24)));
         card.addView(socialButton("", Color.WHITE, "Apple로 계속하기", Color.BLACK, Color.WHITE, dp(12)));
         card.addView(divider());
-        card.addView(input("이메일 주소", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, dp(16)));
-        card.addView(input("비밀번호", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10)));
+        editEmail = input("이메일 주소", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, dp(16));
+        editPassword = input("비밀번호", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, dp(10));
+        card.addView(editEmail);
+        card.addView(editPassword);
         card.addView(loginButton());
         card.addView(signupLink());
         card.addView(text("로그인 시 서비스 이용약관 및 개인정보처리방침에 동의합니다",
@@ -190,7 +198,7 @@ public class Login extends Activity {
         return line;
     }
 
-    private View input(String hint, int inputType, int topMargin) {
+    private EditText input(String hint, int inputType, int topMargin) {
         EditText input = new EditText(hostActivity);
         input.setHint(hint);
         input.setHintTextColor(HINT);
@@ -220,6 +228,24 @@ public class Login extends Activity {
         button.setFocusable(true);
         button.setBackground(roundRect(PRIMARY, dp(12), 0, 0));
         button.setOnClickListener(view -> {
+            String email = editEmail.getText().toString().trim();
+            String password = editPassword.getText().toString();
+
+            if (email.isEmpty()) {
+                Toast.makeText(hostActivity, "이메일을 입력해주세요", Toast.LENGTH_SHORT).show();
+                editEmail.requestFocus();
+                return;
+            }
+            if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                Toast.makeText(hostActivity, "올바른 이메일 형식을 입력해주세요", Toast.LENGTH_SHORT).show();
+                editEmail.requestFocus();
+                return;
+            }
+            if (password.isEmpty()) {
+                Toast.makeText(hostActivity, "비밀번호를 입력해주세요", Toast.LENGTH_SHORT).show();
+                editPassword.requestFocus();
+                return;
+            }
             if (onLogin != null) {
                 onLogin.run();
             }
@@ -240,6 +266,7 @@ public class Login extends Activity {
         spannable.setSpan(new ClickableSpan() {
             @Override
             public void onClick(View widget) {
+                if (onSignup != null) onSignup.run();
             }
 
             @Override

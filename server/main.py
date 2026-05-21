@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from database import init_db
 from auth.router import router as auth_router
 from contract.router import router as contract_router
-from llm import get_client
+from llm_core import get_client
 
 
 @asynccontextmanager
@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
         print("✅ Ollama 연결 확인")
     yield
 
-
+    
 app = FastAPI(
     title="전월세 계약서 독소조항 탐지 API",
     version="1.0.0",
