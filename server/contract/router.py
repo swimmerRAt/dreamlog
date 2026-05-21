@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 from datetime import datetime
 import json
 from database import get_db, Analysis, User
 from auth.utils import get_current_user
 from ocr import extract_text
 from llm import analyze as llm_analyze
+from public_data import lookup_public_data, PublicDataResult
 
 router = APIRouter(prefix="/contract", tags=["contract"])
 
@@ -30,6 +31,7 @@ class AnalysisResponse(BaseModel):
     toxic_clauses: List[ToxicClause]
     original_text: str
     created_at: datetime
+    public_data: Optional[PublicDataResult] = None
 
     class Config:
         from_attributes = True
@@ -159,6 +161,7 @@ def get_analysis(
 
 def _build_response(analysis: Analysis) -> dict:
     toxic_clauses = json.loads(analysis.toxic_clauses) if analysis.toxic_clauses else []
+    public_data = lookup_public_data(analysis.address or "")
     return {
         "id": analysis.id,
         "address": analysis.address or "",
@@ -167,4 +170,5 @@ def _build_response(analysis: Analysis) -> dict:
         "toxic_clauses": toxic_clauses,
         "original_text": analysis.original_text,
         "created_at": analysis.created_at,
+        "public_data": public_data.model_dump(),
     }

@@ -16,7 +16,22 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
+import java.io.IOException;
+
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 public class SignUp {
+    @SuppressWarnings("java:S1313")
+    private static final String BASE_URL = "http://10.0.2.2:8000";
+    private static final MediaType JSON_TYPE = MediaType.get("application/json; charset=utf-8");
+    private final OkHttpClient httpClient = new OkHttpClient();
+
     private static final int PRIMARY  = Color.rgb(63, 81, 181);
     private static final int TEXT     = Color.rgb(33, 33, 33);
     private static final int SECONDARY = Color.rgb(117, 117, 117);
@@ -137,8 +152,7 @@ public class SignUp {
                 editPasswordConfirm.requestFocus();
                 return;
             }
-            Toast.makeText(activity, "가입이 완료됐습니다. 로그인해주세요", Toast.LENGTH_SHORT).show();
-            if (onBackToLogin != null) onBackToLogin.run();
+            performSignup(name, email, password);
         });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(52)
@@ -146,6 +160,49 @@ public class SignUp {
         params.setMargins(0, dp(20), 0, 0);
         button.setLayoutParams(params);
         return button;
+    }
+
+    private void performSignup(String name, String email, String password) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("username", name);
+            body.put("email", email);
+            body.put("password", password);
+
+            Request request = new Request.Builder()
+                    .url(BASE_URL + "/auth/register")
+                    .post(RequestBody.create(body.toString(), JSON_TYPE))
+                    .build();
+
+            new Thread(() -> {
+                try (Response response = httpClient.newCall(request).execute()) {
+                    String responseBody = response.body() != null ? response.body().string() : "";
+                    if (response.isSuccessful()) {
+                        activity.runOnUiThread(() -> {
+                            Toast.makeText(activity, "가입이 완료됐습니다. 로그인해주세요", Toast.LENGTH_SHORT).show();
+                            if (onBackToLogin != null) onBackToLogin.run();
+                        });
+                    } else {
+                        String message = parseError(responseBody);
+                        activity.runOnUiThread(() ->
+                                Toast.makeText(activity, message, Toast.LENGTH_SHORT).show());
+                    }
+                } catch (IOException e) {
+                    activity.runOnUiThread(() ->
+                            Toast.makeText(activity, "서버에 연결할 수 없습니다.", Toast.LENGTH_SHORT).show());
+                }
+            }).start();
+        } catch (Exception e) {
+            Toast.makeText(activity, "오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String parseError(String responseBody) {
+        try {
+            JSONObject err = new JSONObject(responseBody);
+            if (err.has("detail")) return err.getString("detail");
+        } catch (Exception ignored) { /* JSON 파싱 실패 시 기본 메시지 사용 */ }
+        return "가입에 실패했습니다.";
     }
 
     private View loginLink() {
