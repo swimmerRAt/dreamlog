@@ -98,9 +98,9 @@ public class OcrEditScreen extends Activity {
 
         String mode = getIntent().getStringExtra(EXTRA_MODE);
         if (MODE_CAMERA.equals(mode)) {
-            launchCamera();
+            getWindow().getDecorView().post(this::launchCamera);
         } else if (MODE_GALLERY.equals(mode)) {
-            launchGallery();
+            getWindow().getDecorView().post(this::launchGallery);
         }
     }
 
@@ -135,12 +135,12 @@ public class OcrEditScreen extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CAMERA_PERM
-                && grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            launchCamera();
-        } else {
-            Toast.makeText(this, "카메라 권한이 필요합니다.", Toast.LENGTH_SHORT).show();
+        if (requestCode == REQUEST_CAMERA_PERM) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                launchCamera();
+            } else {
+                Toast.makeText(this, "카메라 권한이 필요합니다.", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
