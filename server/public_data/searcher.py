@@ -40,8 +40,8 @@ class PublicDataResult(BaseModel):
 
 def _normalize(addr: str) -> str:
     addr = addr.strip()
-    addr = re.sub(r"번지$", "", addr)          # 말미 "번지" 제거
-    addr = re.sub(r"[^\w\s\-]", " ", addr)    # 특수문자 → 공백
+    addr = re.sub(r"번지\b", "", addr)        # 지번 주소의 "번지" 제거
+    addr = re.sub(r"[^\w\s\-]", " ", addr)    # 괄호 등 특수문자 → 공백
     addr = re.sub(r"\s+", " ", addr)
     return addr.strip()
 
@@ -49,14 +49,25 @@ def _normalize(addr: str) -> str:
 def _extract_lot(addr: str) -> tuple[str, str]:
     """(동명, 번지) 추출. e.g. '덕진구 진북동 124-83' → ('진북동', '124-83')"""
     normalized = _normalize(addr)
-    # 번지: 숫자(-)숫자 또는 숫자만
-    m = re.search(r"(\d+(?:-\d+)?)$", normalized)
+    matches = re.findall(r"([가-힣0-9]+(?:동|가|리))\s+(\d+(?:-\d+)?)\b", normalized)
+    if matches:
+        return matches[-1]
+
+    # 폴백: 마지막 숫자(-숫자)를 번지로 보고 직전 토큰을 동명 후보로 사용
+    m = re.search(r"(\d+(?:-\d+)?)\s*$", normalized)
     if not m:
         return "", normalized
     lot = m.group(1)
     prefix = normalized[: m.start()].strip().split()
     dong = prefix[-1] if prefix else ""
     return dong, lot
+
+
+def _extract_road_key(addr: str) -> tuple[str, str]:
+    """(도로명, 건물번호) 추출. e.g. '전주객사3길 9' → ('전주객사3길', '9')"""
+    normalized = _normalize(addr)
+    matches = re.findall(r"([가-힣A-Za-z0-9]+(?:대로|로|길))\s+(\d+(?:-\d+)?)\b", normalized)
+    return matches[-1] if matches else ("", "")
 
 
 def _matches(query: str, candidate: str) -> bool:
@@ -76,6 +87,13 @@ def _matches(query: str, candidate: str) -> bool:
     c_dong, c_lot = _extract_lot(c)
 
     if q_lot and q_dong and q_lot == c_lot and q_dong == c_dong:
+        return True
+
+    # 도로명 + 건물번호 매칭. 실거래가 CSV는 도로명 컬럼에 시군구가 빠져 있다.
+    q_road, q_no = _extract_road_key(q)
+    c_road, c_no = _extract_road_key(c)
+
+    if q_road and q_no and q_road == c_road and q_no == c_no:
         return True
 
     return False
@@ -148,9 +166,11 @@ def _find_trades(address: str) -> list[TradeInfo]:
         # 실거래가: 시군구(동명 포함) + 번지 조합
         sigungu = row.get("시군구", "")
         lot = row.get("번지", "")
-        candidate = f"{sigungu} {lot}".strip()
+        road = row.get("도로명", "")
+        land_candidate = f"{sigungu} {lot}".strip()
+        road_candidate = f"{sigungu} {road}".strip()
 
-        if _matches(address, candidate):
+        if _matches(address, land_candidate) or (road and _matches(address, road_candidate)):
             results.append(TradeInfo(
                 complex_name=row.get("단지명", ""),
                 trade_type=row.get("전월세구분", ""),
